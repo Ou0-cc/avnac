@@ -1,4 +1,6 @@
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+import { useCallback, useRef, type RefObject } from 'react'
+import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
 import {
   ArrowUpRight01Icon,
   CircleIcon,
@@ -46,6 +48,7 @@ const ITEMS: Item[] = [
 type Props = {
   open: boolean
   disabled?: boolean
+  anchorRef: RefObject<HTMLElement | null>
   onClose: () => void
   onPick: (kind: PopoverShapeKind) => void
 }
@@ -53,15 +56,31 @@ type Props = {
 export default function ShapesPopover({
   open,
   disabled,
+  anchorRef,
   onClose,
   onPick,
 }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const pickPanel = useCallback(() => panelRef.current, [])
+  const { openUpward, shiftX } = useViewportAwarePopoverPlacement(
+    open && !disabled,
+    anchorRef,
+    320,
+    pickPanel,
+    'left',
+  )
+
   if (!open || disabled) return null
 
   return (
     <div
+      ref={panelRef}
       role="menu"
-      className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+      style={{ transform: `translateX(${shiftX}px)` }}
+      className={[
+        'absolute left-0 z-[60] min-w-[11rem] overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]',
+        openUpward ? 'bottom-full mb-2' : 'top-full mt-2',
+      ].join(' ')}
     >
       {ITEMS.map(({ kind, label, icon }) => (
         <button
