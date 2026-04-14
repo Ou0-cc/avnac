@@ -10,6 +10,8 @@ export type AvnacShapeKind =
 
 export type ArrowLineStyle = 'solid' | 'dashed' | 'dotted'
 
+export type ArrowPathType = 'straight' | 'curved'
+
 export type AvnacShapeMeta = {
   kind: AvnacShapeKind
   polygonSides?: number
@@ -20,6 +22,7 @@ export type AvnacShapeMeta = {
   arrowStrokeWidth?: number
   arrowLineStyle?: ArrowLineStyle
   arrowRoundedEnds?: boolean
+  arrowPathType?: ArrowPathType
 }
 
 export function getAvnacShapeMeta(
