@@ -10,8 +10,10 @@ import {
   Copy01Icon,
   Delete02Icon,
   FilePasteIcon,
+  GroupItemsIcon,
   Layers01Icon,
   More01Icon,
+  UngroupItemsIcon,
   SquareLock01Icon,
   SquareUnlock01Icon,
 } from '@hugeicons/core-free-icons'
@@ -53,6 +55,10 @@ type CanvasElementToolbarProps = {
   onPaste: () => void
   onAlign: (kind: CanvasAlignKind) => void
   alignAlreadySatisfied: Record<CanvasAlignKind, boolean>
+  canGroup: boolean
+  canUngroup: boolean
+  onGroup: () => void
+  onUngroup: () => void
 }
 
 const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProps>(
@@ -69,6 +75,10 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
       onPaste,
       onAlign,
       alignAlreadySatisfied,
+      canGroup,
+      canUngroup,
+      onGroup,
+      onUngroup,
     },
     ref,
   ) {
@@ -98,6 +108,12 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
       return () => document.removeEventListener('mousedown', onDown)
     }, [moreOpen, alignOpen])
 
+    useEffect(() => {
+      if (!locked) return
+      setMoreOpen(false)
+      setAlignOpen(false)
+    }, [locked])
+
     return (
       <div
         ref={ref}
@@ -116,6 +132,50 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
             ref={moreWrapRef}
             className="relative flex items-stretch overflow-visible"
           >
+            {canGroup ? (
+              <>
+                <button
+                  type="button"
+                  className={[
+                    floatingToolbarIconButton(false, { wide: true }),
+                    'gap-1.5 px-2.5',
+                  ].join(' ')}
+                  title="Group selection (Cmd/Ctrl+G)"
+                  aria-label="Group selection"
+                  onClick={onGroup}
+                >
+                  <HugeiconsIcon
+                    icon={GroupItemsIcon}
+                    size={18}
+                    strokeWidth={1.75}
+                  />
+                  <span className="text-[13px] font-medium">Group</span>
+                </button>
+                <FloatingToolbarDivider />
+              </>
+            ) : null}
+            {canUngroup ? (
+              <>
+                <button
+                  type="button"
+                  className={[
+                    floatingToolbarIconButton(false, { wide: true }),
+                    'gap-1.5 px-2.5',
+                  ].join(' ')}
+                  title="Ungroup (Cmd/Ctrl+Shift+G)"
+                  aria-label="Ungroup selection"
+                  onClick={onUngroup}
+                >
+                  <HugeiconsIcon
+                    icon={UngroupItemsIcon}
+                    size={18}
+                    strokeWidth={1.75}
+                  />
+                  <span className="text-[13px] font-medium">Ungroup</span>
+                </button>
+                <FloatingToolbarDivider />
+              </>
+            ) : null}
             <button
               type="button"
               className={floatingToolbarIconButton(false)}
