@@ -18,7 +18,12 @@ import {
   effectiveShaftBulge,
   layoutArrowGroup,
 } from './avnac-stroke-arrow'
-import { getAvnacShapeMeta, setAvnacShapeMeta } from './avnac-shape-meta'
+import {
+  avnacStrokeLineHeadFrac,
+  getAvnacShapeMeta,
+  isAvnacStrokeLineLike,
+  setAvnacShapeMeta,
+} from './avnac-shape-meta'
 
 type ModifyPolyEv = Parameters<typeof controlsUtils.wrapWithFireEvent>[0]
 const MODIFY_POLY = 'modifyPoly' as ModifyPolyEv
@@ -77,7 +82,7 @@ function scenePointFromCanvas(canvas: Canvas, x: number, y: number) {
 
 export function ensureAvnacArrowEndpoints(g: Group) {
   const meta = getAvnacShapeMeta(g)
-  if (!meta || meta.kind !== 'arrow') return
+  if (!meta || !isAvnacStrokeLineLike(meta)) return
   if (meta.arrowEndpoints) return
   const c = g.getCenterPoint()
   const rad = ((g.angle ?? 0) * Math.PI) / 180
@@ -108,7 +113,7 @@ export function ensureAvnacArrowEndpoints(g: Group) {
 
 export function syncAvnacArrowEndpointsFromGeometry(g: Group) {
   const meta = getAvnacShapeMeta(g)
-  if (!meta || meta.kind !== 'arrow') return
+  if (!meta || !isAvnacStrokeLineLike(meta)) return
   const pair = arrowTailTipLocal(g)
   if (!pair) return
   const m = g.calcTransformMatrix()
@@ -151,7 +156,8 @@ function arrowEndpointAction(which: 'tail' | 'tip'): TransformActionHandler {
     if (!canvas) return false
     ensureAvnacArrowEndpoints(g)
     const meta = getAvnacShapeMeta(g)
-    if (!meta || meta.kind !== 'arrow' || !meta.arrowEndpoints) return false
+    if (!meta || !isAvnacStrokeLineLike(meta) || !meta.arrowEndpoints)
+      return false
     const scene = scenePointFromCanvas(canvas, x, y)
     const ep = { ...meta.arrowEndpoints }
     if (which === 'tail') {
@@ -165,7 +171,7 @@ function arrowEndpointAction(which: 'tail' | 'tip'): TransformActionHandler {
     const color = arrowDisplayColor(g)
     layoutArrowGroup(g, ep.x1, ep.y1, ep.x2, ep.y2, {
       strokeWidth: strokeW,
-      headFrac: meta.arrowHead ?? 1,
+      headFrac: avnacStrokeLineHeadFrac(meta),
       color,
       lineStyle: meta.arrowLineStyle,
       roundedEnds: meta.arrowRoundedEnds,
@@ -210,7 +216,11 @@ function arrowCurveHandlePosition() {
   ) => {
     const g = fabricObject as Group
     const meta = getAvnacShapeMeta(g)
-    if (!meta || meta.kind !== 'arrow' || meta.arrowPathType !== 'curved') {
+    if (
+      !meta ||
+      !isAvnacStrokeLineLike(meta) ||
+      meta.arrowPathType !== 'curved'
+    ) {
       return new Point(0, 0)
     }
     const ep = meta.arrowEndpoints
@@ -219,7 +229,7 @@ function arrowCurveHandlePosition() {
     const dy = ep.y2 - ep.y1
     const L = Math.max(Math.hypot(dx, dy), 1)
     const strokeW = meta.arrowStrokeWidth ?? 10
-    const headFrac = meta.arrowHead ?? 1
+    const headFrac = avnacStrokeLineHeadFrac(meta)
     const shaftLen = arrowShaftLen(L, strokeW, headFrac)
     const bulge = effectiveShaftBulge(
       L,
@@ -247,7 +257,7 @@ function arrowCurveHandleAction(): TransformActionHandler {
     const meta = getAvnacShapeMeta(g)
     if (
       !meta ||
-      meta.kind !== 'arrow' ||
+      !isAvnacStrokeLineLike(meta) ||
       meta.arrowPathType !== 'curved' ||
       !meta.arrowEndpoints
     ) {
@@ -258,7 +268,7 @@ function arrowCurveHandleAction(): TransformActionHandler {
     const dy = ep.y2 - ep.y1
     const L = Math.max(Math.hypot(dx, dy), 1)
     const strokeW = meta.arrowStrokeWidth ?? 10
-    const headFrac = meta.arrowHead ?? 1
+    const headFrac = avnacStrokeLineHeadFrac(meta)
     const shaftLen = arrowShaftLen(L, strokeW, headFrac)
     const scene = scenePointFromCanvas(canvas, x, y)
     const local = util.transformPoint(
@@ -295,7 +305,10 @@ function arrowCurveHandleAction(): TransformActionHandler {
 
 export function syncAvnacArrowCurveControlVisibility(g: Group) {
   const meta = getAvnacShapeMeta(g)
-  const show = meta?.kind === 'arrow' && meta.arrowPathType === 'curved'
+   const show =
+    !!meta &&
+    isAvnacStrokeLineLike(meta) &&
+    meta.arrowPathType === 'curved'
   g.setControlVisible('curve', show)
 }
 
