@@ -11,7 +11,7 @@ import {
   Delete02Icon,
   FilePasteIcon,
   GroupItemsIcon,
-  Layers01Icon,
+  Layers02Icon,
   More01Icon,
   UngroupItemsIcon,
   SquareLock01Icon,
@@ -205,7 +205,7 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                   onClick={onDuplicate}
                 >
                   <HugeiconsIcon
-                    icon={Layers01Icon}
+                    icon={Layers02Icon}
                     size={18}
                     strokeWidth={1.75}
                   />
