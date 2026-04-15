@@ -84,6 +84,62 @@ export function measurePopoverPlacementInContainer(
   return { openUpward, shiftX }
 }
 
+/** Clamp a panel that opens horizontally (e.g. `left-full` from anchor) inside the viewport rect. */
+export function measureHorizontalFlyoutInContainer(
+  container: HTMLElement,
+  panel: HTMLElement,
+  pad: number = 8,
+): { shiftX: number; shiftY: number } {
+  const vr = container.getBoundingClientRect()
+  const pr = panel.getBoundingClientRect()
+  let shiftX = 0
+  let shiftY = 0
+  if (pr.right > vr.right - pad) shiftX += vr.right - pad - pr.right
+  if (pr.left + shiftX < vr.left + pad)
+    shiftX += vr.left + pad - (pr.left + shiftX)
+  if (pr.bottom + shiftY > vr.bottom - pad)
+    shiftY += vr.bottom - pad - (pr.bottom + shiftY)
+  if (pr.top + shiftY < vr.top + pad)
+    shiftY += vr.top + pad - (pr.top + shiftY)
+  return { shiftX, shiftY }
+}
+
+export function useContainedHorizontalPopoverPlacement(
+  open: boolean,
+  viewportRef: RefObject<HTMLElement | null>,
+  pickPanel: () => HTMLElement | null,
+) {
+  const [shift, setShift] = useState({ x: 0, y: 0 })
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setShift({ x: 0, y: 0 })
+      return
+    }
+
+    function sync() {
+      const viewport = viewportRef.current
+      const panel = pickPanel()
+      if (!viewport || !panel) return
+      const { shiftX, shiftY } = measureHorizontalFlyoutInContainer(
+        viewport,
+        panel,
+      )
+      setShift({ x: shiftX, y: shiftY })
+    }
+
+    sync()
+    window.addEventListener('resize', sync)
+    window.addEventListener('scroll', sync, true)
+    return () => {
+      window.removeEventListener('resize', sync)
+      window.removeEventListener('scroll', sync, true)
+    }
+  }, [open, viewportRef, pickPanel])
+
+  return shift
+}
+
 export function useContainedViewportPopoverPlacement(
   open: boolean,
   anchorRef: RefObject<HTMLElement | null>,
