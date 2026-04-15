@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import EditorRangeSlider from './editor-range-slider'
 import { floatingToolbarPopoverClass } from './floating-toolbar-shell'
 
 export type BgValue =
@@ -448,19 +449,18 @@ export default function BackgroundPopover({ value, onChange }: Props) {
                 >
                   Angle
                 </label>
-                <input
-                  type="range"
+                <EditorRangeSlider
                   min={0}
                   max={360}
                   value={gradAngle}
-                  onChange={(e) => {
-                    const a = clampAngle(Number(e.target.value))
+                  onChange={(n) => {
+                    const a = clampAngle(n)
                     setGradAngle(a)
                     setAngleDraft(String(a))
                     applyCustomGradient(gradStop1, gradStop2, a)
                   }}
-                  className="h-1.5 w-full min-w-0 accent-neutral-900"
                   aria-label="Gradient angle"
+                  trackClassName="min-w-0 w-full"
                 />
                 <div className="relative w-full min-w-[4.5rem] shrink-0">
                   <input
