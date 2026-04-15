@@ -2,6 +2,9 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowDown01Icon,
   BackgroundIcon,
+  HelpCircleIcon,
+  Image01Icon,
+  Layers02Icon,
   TextFontIcon,
 } from '@hugeicons/core-free-icons'
 import type { Canvas, FabricObject, IText } from 'fabric'
@@ -11,13 +14,20 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
-import { installArtboardCenterSnap } from '../lib/fabric-artboard-center-snap'
+import {
+  AVNAC_DOC_VERSION,
+  AVNAC_STORAGE_KEY,
+  parseAvnacDocument,
+  type AvnacDocumentV1,
+} from '../lib/avnac-document'
+import { installSceneSnap, type SceneSnapGuide } from '../lib/fabric-scene-snap'
 import { removeActiveObjectFromCanvas } from '../lib/fabric-remove-selection'
 import {
   ensureAvnacArrowEndpoints,
@@ -88,9 +98,15 @@ import CanvasElementToolbar, {
 } from './canvas-element-toolbar'
 import { FloatingToolbarShell } from './floating-toolbar-shell'
 import { getAvnacLocked, setAvnacLocked } from '../lib/avnac-object-lock'
+import { ARTBOARD_PRESETS } from '../data/artboard-presets'
+import type { ExportPngOptions } from './editor-export-menu'
+import EditorLayersPanel, {
+  type EditorLayerRow,
+} from './editor-layers-panel'
+import EditorShortcutsModal from './editor-shortcuts-modal'
 
-const ARTBOARD_W = 4000
-const ARTBOARD_H = 4000
+const DEFAULT_ARTBOARD_W = 4000
+const DEFAULT_ARTBOARD_H = 4000
 const ARTBOARD_ALIGN_PAD = 32
 const ARTBOARD_ALIGN_ALREADY_EPS = 2
 const ZOOM_MIN_PCT = 5
@@ -101,26 +117,26 @@ const OBJECT_SERIAL_KEYS = ['avnacShape', 'avnacLocked'] as const
 const DEFAULT_PAINT: BgValue = { type: 'solid', color: '#262626' }
 
 const FIT_PADDING = 32
-const FONT_SIZE = Math.round(ARTBOARD_W * 0.04)
-const RECT_W = Math.round(ARTBOARD_W * 0.2)
-const RECT_H = Math.round(ARTBOARD_H * 0.12)
-const RECT_RX = Math.round(ARTBOARD_W * 0.004)
 
-function artboardAlignAlreadySatisfied(br: {
-  left: number
-  top: number
-  width: number
-  height: number
-}): Record<CanvasAlignKind, boolean> {
+function artboardAlignAlreadySatisfied(
+  br: {
+    left: number
+    top: number
+    width: number
+    height: number
+  },
+  boardW: number,
+  boardH: number,
+): Record<CanvasAlignKind, boolean> {
   const pad = ARTBOARD_ALIGN_PAD
   const eps = ARTBOARD_ALIGN_ALREADY_EPS
   return {
     left: Math.abs(br.left - pad) <= eps,
-    centerH: Math.abs(br.left + br.width / 2 - ARTBOARD_W / 2) <= eps,
-    right: Math.abs(br.left + br.width - (ARTBOARD_W - pad)) <= eps,
+    centerH: Math.abs(br.left + br.width / 2 - boardW / 2) <= eps,
+    right: Math.abs(br.left + br.width - (boardW - pad)) <= eps,
     top: Math.abs(br.top - pad) <= eps,
-    centerV: Math.abs(br.top + br.height / 2 - ARTBOARD_H / 2) <= eps,
-    bottom: Math.abs(br.top + br.height - (ARTBOARD_H - pad)) <= eps,
+    centerV: Math.abs(br.top + br.height / 2 - boardH / 2) <= eps,
+    bottom: Math.abs(br.top + br.height - (boardH - pad)) <= eps,
   }
 }
 
@@ -159,6 +175,10 @@ function isEventOnFabricCanvas(canvas: Canvas, target: EventTarget | null) {
   return lower.contains(target) || upper.contains(target)
 }
 
+function pointerIsTouch(e: Event): boolean {
+  return 'pointerType' in e && (e as PointerEvent).pointerType === 'touch'
+}
+
 /** Local outer radius for centered polygon/star points after scaling is baked into geometry. */
 function outerRadiusFromScaledPolygon(obj: FabricObject) {
   return Math.max(
@@ -172,7 +192,7 @@ function primaryFontFamily(css: string) {
   return first.replace(/^["']|["']$/g, '')
 }
 
-function readTextFormat(obj: IText): TextFormatToolbarValues {
+function readTextFormat(obj: IText, fontSize: number): TextFormatToolbarValues {
   const fillStyle = bgValueFromFabricFill(obj)
   const ta = obj.textAlign ?? 'left'
   const textAlign =
@@ -185,7 +205,7 @@ function readTextFormat(obj: IText): TextFormatToolbarValues {
     (typeof w === 'number' && w >= 600)
   return {
     fontFamily: primaryFontFamily(String(obj.fontFamily ?? 'Inter')),
-    fontSize: obj.fontSize ?? FONT_SIZE,
+    fontSize: obj.fontSize ?? fontSize,
     fillStyle,
     textAlign,
     bold,
@@ -194,8 +214,24 @@ function readTextFormat(obj: IText): TextFormatToolbarValues {
   }
 }
 
+function fabricObjectLabel(
+  o: FabricObject,
+  mod: typeof import('fabric'),
+): string {
+  if (mod.FabricImage && o instanceof mod.FabricImage) return 'Image'
+  if (mod.IText && o instanceof mod.IText) {
+    const t = o.text?.trim() || 'Text'
+    return t.length > 24 ? `${t.slice(0, 24)}…` : t
+  }
+  const m = getAvnacShapeMeta(o)
+  if (m) return m.kind
+  return o.type ?? 'Object'
+}
+
 export type FabricEditorHandle = {
-  exportPng: () => void
+  exportPng: (opts?: ExportPngOptions) => void
+  saveDocument: () => void
+  loadDocument: (file: File) => Promise<void>
 }
 
 type FabricEditorProps = {
@@ -216,10 +252,40 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
   const bottomToolbarRef = useRef<HTMLDivElement>(null)
   const fabricCanvasRef = useRef<Canvas | null>(null)
   const fabricModRef = useRef<typeof import('fabric') | null>(null)
+  const removeSceneSnapRef = useRef<(() => void) | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  const [artboardSize, setArtboardSize] = useState({
+    w: DEFAULT_ARTBOARD_W,
+    h: DEFAULT_ARTBOARD_H,
+  })
+  const artboardW = artboardSize.w
+  const artboardH = artboardSize.h
+  const artboardWRef = useRef(artboardW)
+  const artboardHRef = useRef(artboardH)
+  artboardWRef.current = artboardW
+  artboardHRef.current = artboardH
+
+  const layout = useMemo(
+    () => ({
+      fontSize: Math.round(artboardW * 0.04),
+      rectW: Math.round(artboardW * 0.2),
+      rectH: Math.round(artboardH * 0.12),
+      rectRx: Math.round(artboardW * 0.004),
+    }),
+    [artboardW, artboardH],
+  )
+
+  const historySnapshotsRef = useRef<AvnacDocumentV1[]>([])
+  const historyIndexRef = useRef(0)
+  const applyingHistoryRef = useRef(false)
+  const historyInitRef = useRef(false)
 
   const [ready, setReady] = useState(false)
   const [zoomPercent, setZoomPercent] = useState<number | null>(null)
   const [bgValue, setBgValue] = useState<BgValue>({ type: 'solid', color: '#ffffff' })
+  const bgValueRef = useRef(bgValue)
+  bgValueRef.current = bgValue
   const [bgPopoverOpen, setBgPopoverOpen] = useState(false)
   const [selectedPaint, setSelectedPaint] = useState<BgValue>(DEFAULT_PAINT)
   const [hasObjectSelected, setHasObjectSelected] = useState(false)
@@ -235,11 +301,10 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     paint: BgValue
   } | null>(null)
   const [selectionOpacityPct, setSelectionOpacityPct] = useState(100)
-  const [artboardSnapGuides, setArtboardSnapGuides] = useState({
-    vertical: false,
-    horizontal: false,
-  })
+  const [sceneSnapGuides, setSceneSnapGuides] = useState<SceneSnapGuide[]>([])
   const [artboardEmptyHovered, setArtboardEmptyHovered] = useState(false)
+  const [layersOpen, setLayersOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [elementToolbarLayout, setElementToolbarLayout] = useState<{
     left: number
     top: number
@@ -281,8 +346,8 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       return
     }
 
-    setTextToolbarValues(readTextFormat(obj))
-  }, [])
+    setTextToolbarValues(readTextFormat(obj, layout.fontSize))
+  }, [layout.fontSize])
 
   const syncShapeToolbar = useCallback(() => {
     const canvas = fabricCanvasRef.current
@@ -504,8 +569,10 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         Math.min(ZOOM_MAX_PCT, Math.round(pct)),
       )
       const s = clamped / 100
-      const dw = ARTBOARD_W * s
-      const dh = ARTBOARD_H * s
+      const aw = artboardWRef.current
+      const ah = artboardHRef.current
+      const dw = aw * s
+      const dh = ah * s
       canvas.setDimensions({ width: dw, height: dh }, { cssOnly: true })
       canvas.calcOffset()
       canvas.requestRenderAll()
@@ -527,7 +594,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const ch = viewport.clientHeight - FIT_PADDING * 2
     if (cw <= 0 || ch <= 0) return
 
-    const raw = Math.min(cw / ARTBOARD_W, ch / ARTBOARD_H) * 0.98
+    const aw = artboardWRef.current
+    const ah = artboardHRef.current
+    const raw = Math.min(cw / aw, ch / ah) * 0.98
     const scale = Math.min(1, raw)
     const fitPct = Math.max(
       ZOOM_MIN_PCT,
@@ -622,12 +691,49 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         mod,
         bgValue.stops,
         bgValue.angle,
-        ARTBOARD_W,
-        ARTBOARD_H,
+        artboardW,
+        artboardH,
       )
     }
     canvas.requestRenderAll()
-  }, [bgValue, ready])
+  }, [bgValue, ready, artboardW, artboardH])
+
+  const zoomPercentRef = useRef(zoomPercent)
+  zoomPercentRef.current = zoomPercent
+
+  useEffect(() => {
+    if (!ready) return
+    const canvas = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!canvas || !mod) return
+
+    canvas.setDimensions({ width: artboardW, height: artboardH })
+    const z = zoomPercentRef.current ?? 100
+    const s = z / 100
+    canvas.setDimensions(
+      { width: artboardW * s, height: artboardH * s },
+      { cssOnly: true },
+    )
+    canvas.calcOffset()
+
+    removeSceneSnapRef.current?.()
+    removeSceneSnapRef.current = installSceneSnap(canvas, {
+      width: artboardW,
+      height: artboardH,
+      fabricMod: mod,
+      onGuidesChange: setSceneSnapGuides,
+    })
+
+    canvas.requestRenderAll()
+    queueMicrotask(() => {
+      if (!zoomUserAdjustedRef.current) fitArtboardToViewport()
+    })
+
+    return () => {
+      removeSceneSnapRef.current?.()
+      removeSceneSnapRef.current = null
+    }
+  }, [ready, artboardW, artboardH, fitArtboardToViewport])
 
   useEffect(() => {
     const el = canvasElRef.current
@@ -635,7 +741,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
 
     let disposed = false
     let canvas: Canvas | null = null
-    let removeArtboardCenterSnap: (() => void) | undefined
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Backspace' && e.key !== 'Delete') return
@@ -665,11 +770,19 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       })
       Object.assign(mod.IText.ownDefaults, { objectCaching: false })
 
+      for (const k of OBJECT_SERIAL_KEYS) {
+        if (!mod.FabricObject.customProperties.includes(k)) {
+          mod.FabricObject.customProperties.push(k)
+        }
+      }
+
       fabricModRef.current = mod
       installFabricSelectionChrome(mod)
+      const aw0 = artboardWRef.current
+      const ah0 = artboardHRef.current
       canvas = new mod.Canvas(canvasElRef.current, {
-        width: ARTBOARD_W,
-        height: ARTBOARD_H,
+        width: aw0,
+        height: ah0,
         backgroundColor: '#ffffff',
         preserveObjectStacking: true,
       })
@@ -682,11 +795,66 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
 
       fabricCanvasRef.current = canvas
       attachFabricHoverOutline(canvas)
-      removeArtboardCenterSnap = installArtboardCenterSnap(canvas, {
-        width: ARTBOARD_W,
-        height: ARTBOARD_H,
-        onGuidesChange: setArtboardSnapGuides,
-      })
+
+      const onAltDuplicateBefore = (opt: {
+        e?: Event
+        target?: FabricObject | null
+      }) => {
+        const cnv = fabricCanvasRef.current
+        if (!cnv) return
+        const e = opt.e as MouseEvent | undefined
+        if (!e || e.button !== 0 || !e.altKey) return
+        const active = cnv.getActiveObject()
+        const hit = opt.target ?? undefined
+        if (!active || !hit) return
+        if ('isEditing' in active && (active as IText).isEditing) return
+        const inSel =
+          active === hit ||
+          (!!mod.ActiveSelection &&
+            active instanceof mod.ActiveSelection &&
+            active.getObjects().includes(hit))
+        if (!inSel) return
+        if (
+          mod.ActiveSelection &&
+          active instanceof mod.ActiveSelection &&
+          active.getObjects().some((o) => getAvnacLocked(o))
+        ) {
+          return
+        }
+        if (!(mod.ActiveSelection && active instanceof mod.ActiveSelection)) {
+          if (getAvnacLocked(active)) return
+        }
+        if (hit.findControl(cnv.getViewportPoint(e), pointerIsTouch(e))) {
+          return
+        }
+
+        void active.clone([...OBJECT_SERIAL_KEYS]).then((dup) => {
+          const clearLock = (o: FabricObject) => {
+            if (getAvnacLocked(o)) setAvnacLocked(o, false, mod)
+          }
+          if (mod.ActiveSelection && dup instanceof mod.ActiveSelection) {
+            dup.getObjects().forEach(clearLock)
+          } else {
+            clearLock(dup as FabricObject)
+          }
+          cnv.add(dup)
+          cnv.discardActiveObject()
+          cnv.setActiveObject(dup)
+          dup.setCoords()
+          const cPriv = cnv as unknown as {
+            _setupCurrentTransform: (
+              ev: MouseEvent,
+              t: FabricObject,
+              already: boolean,
+            ) => void
+          }
+          cPriv._setupCurrentTransform(e, dup as FabricObject, false)
+          cnv.requestRenderAll()
+          selectionTick()
+        })
+      }
+
+      canvas.on('mouse:down:before', onAltDuplicateBefore)
 
       const onSelect = () => {
         syncFillFromSelection()
@@ -740,8 +908,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       setCanvasBodySelected(true)
 
       if (disposed) {
-        removeArtboardCenterSnap?.()
-        removeArtboardCenterSnap = undefined
+        canvas.off('mouse:down:before', onAltDuplicateBefore)
         canvas.off('selection:created', onSelect)
         canvas.off('selection:updated', onSelect)
         canvas.off('selection:cleared', onClear)
@@ -761,8 +928,8 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       disposed = true
       zoomUserAdjustedRef.current = false
       window.removeEventListener('keydown', onKeyDown)
-      removeArtboardCenterSnap?.()
-      removeArtboardCenterSnap = undefined
+      removeSceneSnapRef.current?.()
+      removeSceneSnapRef.current = null
       const c = fabricCanvasRef.current
       fabricCanvasRef.current = null
       fabricModRef.current = null
@@ -990,6 +1157,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       const n = e.target as Node
       if (selectionToolsRef.current?.contains(n)) return
       if (elementToolbarRef.current?.contains(n)) return
+      if ((n as Element).closest?.('[data-avnac-chrome]')) return
       setBgPopoverOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
@@ -1011,6 +1179,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       if (bottomToolbarRef.current?.contains(t)) return
       if (canvasZoomRef.current?.contains(t)) return
       if (elementToolbarRef.current?.contains(t)) return
+      if ((t as Element).closest?.('[data-avnac-chrome]')) return
       if (isEventOnFabricCanvas(c, t)) return
 
       if (c.getActiveObject()) {
@@ -1031,12 +1200,12 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     if (!canvas || !mod) return
     loadGoogleFontFamily('Inter')
     const t = new mod.Textbox('Your text', {
-      left: ARTBOARD_W / 2,
-      top: ARTBOARD_H / 2,
+      left: artboardW / 2,
+      top: artboardH / 2,
       originX: 'center',
       originY: 'center',
       width: 20,
-      fontSize: FONT_SIZE,
+      fontSize: layout.fontSize,
       fill: bgValueSolidFallback(selectedPaint),
       fontFamily: 'Inter',
     })
@@ -1055,13 +1224,13 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const mod = fabricModRef.current
     if (!canvas || !mod) return
     const r = new mod.Rect({
-      left: ARTBOARD_W / 2 - RECT_W / 2,
-      top: ARTBOARD_H / 2 - RECT_H / 2,
-      width: RECT_W,
-      height: RECT_H,
+      left: artboardW / 2 - layout.rectW / 2,
+      top: artboardH / 2 - layout.rectH / 2,
+      width: layout.rectW,
+      height: layout.rectH,
       fill: bgValueSolidFallback(selectedPaint),
-      rx: RECT_RX,
-      ry: RECT_RX,
+      rx: layout.rectRx,
+      ry: layout.rectRx,
     })
     setAvnacShapeMeta(r, { kind: 'rect' })
     applyBgValueToFill(mod, r, selectedPaint)
@@ -1075,10 +1244,10 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
     if (!canvas || !mod) return
-    const r = Math.round(Math.min(RECT_W, RECT_H) / 2)
+    const r = Math.round(Math.min(layout.rectW, layout.rectH) / 2)
     const e = new mod.Ellipse({
-      left: ARTBOARD_W / 2,
-      top: ARTBOARD_H / 2,
+      left: artboardW / 2,
+      top: artboardH / 2,
       rx: r,
       ry: r,
       fill: bgValueSolidFallback(selectedPaint),
@@ -1097,11 +1266,11 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
     if (!canvas || !mod) return
-    const R = Math.round(RECT_W * 0.36)
+    const R = Math.round(layout.rectW * 0.36)
     const pts = regularPolygonPoints(sides, R)
     const p = new mod.Polygon(pts, {
-      left: ARTBOARD_W / 2,
-      top: ARTBOARD_H / 2,
+      left: artboardW / 2,
+      top: artboardH / 2,
       fill: bgValueSolidFallback(selectedPaint),
       originX: 'center',
       originY: 'center',
@@ -1118,11 +1287,11 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
     if (!canvas || !mod) return
-    const R = Math.round(RECT_W * 0.38)
+    const R = Math.round(layout.rectW * 0.38)
     const pts = starPolygonPoints(points, R)
     const p = new mod.Polygon(pts, {
-      left: ARTBOARD_W / 2,
-      top: ARTBOARD_H / 2,
+      left: artboardW / 2,
+      top: artboardH / 2,
       fill: bgValueSolidFallback(selectedPaint),
       originX: 'center',
       originY: 'center',
@@ -1139,9 +1308,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
     if (!canvas || !mod) return
-    const half = Math.round(RECT_W * 0.42)
-    const cx = ARTBOARD_W / 2
-    const cy = ARTBOARD_H / 2
+    const half = Math.round(layout.rectW * 0.42)
+    const cx = artboardW / 2
+    const cy = artboardH / 2
     const x1 = cx - half
     const y1 = cy
     const x2 = cx + half
@@ -1174,9 +1343,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const mod = fabricModRef.current
     if (!canvas || !mod) return
     const head = 1
-    const cx = ARTBOARD_W / 2
-    const cy = ARTBOARD_H / 2
-    const half = Math.round(RECT_W * 0.42)
+    const cx = artboardW / 2
+    const cy = artboardH / 2
+    const half = Math.round(layout.rectW * 0.42)
     const x1 = cx - half
     const y1 = cy
     const x2 = cx + half
@@ -1496,12 +1665,12 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     let dy = 0
     if (kind === 'left') dx = pad - br.left
     else if (kind === 'centerH')
-      dx = ARTBOARD_W / 2 - br.left - br.width / 2
-    else if (kind === 'right') dx = ARTBOARD_W - pad - br.left - br.width
+      dx = artboardW / 2 - br.left - br.width / 2
+    else if (kind === 'right') dx = artboardW - pad - br.left - br.width
     else if (kind === 'top') dy = pad - br.top
     else if (kind === 'centerV')
-      dy = ARTBOARD_H / 2 - br.top - br.height / 2
-    else if (kind === 'bottom') dy = ARTBOARD_H - pad - br.top - br.height
+      dy = artboardH / 2 - br.top - br.height / 2
+    else if (kind === 'bottom') dy = artboardH - pad - br.top - br.height
 
     if (mod.ActiveSelection && obj instanceof mod.ActiveSelection) {
       obj.getObjects().forEach((o) => {
@@ -1616,17 +1785,294 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     syncShapeToolbar()
   }
 
-  const exportPng = useCallback(() => {
+  const captureDoc = useCallback((): AvnacDocumentV1 => {
+    const canvas = fabricCanvasRef.current
+    const fabricJson =
+      canvas?.toObject([...OBJECT_SERIAL_KEYS] as unknown as string[]) ??
+      ({ objects: [] } as Record<string, unknown>)
+    return {
+      v: AVNAC_DOC_VERSION,
+      artboard: {
+        width: artboardWRef.current,
+        height: artboardHRef.current,
+      },
+      bg: bgValueRef.current,
+      fabric: fabricJson as Record<string, unknown>,
+    }
+  }, [])
+
+  const applyDoc = useCallback(
+    async (doc: AvnacDocumentV1) => {
+      const canvas = fabricCanvasRef.current
+      const mod = fabricModRef.current
+      if (!canvas || !mod) return
+      applyingHistoryRef.current = true
+      try {
+        artboardWRef.current = doc.artboard.width
+        artboardHRef.current = doc.artboard.height
+        setArtboardSize({
+          w: doc.artboard.width,
+          h: doc.artboard.height,
+        })
+        setBgValue(doc.bg)
+        await canvas.loadFromJSON(doc.fabric)
+        const z = zoomPercentRef.current ?? 100
+        const s = z / 100
+        canvas.setDimensions({
+          width: doc.artboard.width,
+          height: doc.artboard.height,
+        })
+        canvas.setDimensions(
+          {
+            width: doc.artboard.width * s,
+            height: doc.artboard.height * s,
+          },
+          { cssOnly: true },
+        )
+        canvas.calcOffset()
+        removeSceneSnapRef.current?.()
+        removeSceneSnapRef.current = installSceneSnap(canvas, {
+          width: doc.artboard.width,
+          height: doc.artboard.height,
+          fabricMod: mod,
+          onGuidesChange: setSceneSnapGuides,
+        })
+        canvas.discardActiveObject()
+        canvas.requestRenderAll()
+        setHasObjectSelected(false)
+        setCanvasBodySelected(true)
+        selectionTick()
+        syncTextToolbar()
+        syncShapeToolbar()
+      } finally {
+        applyingHistoryRef.current = false
+      }
+    },
+    [syncTextToolbar, syncShapeToolbar],
+  )
+
+  const commitHistory = useCallback(() => {
+    if (!ready || applyingHistoryRef.current) return
+    const snap = captureDoc()
+    const ser = JSON.stringify(snap)
+    const past = historySnapshotsRef.current
+    const idx = historyIndexRef.current
+    if (past[idx] && JSON.stringify(past[idx]) === ser) return
+    past.splice(idx + 1)
+    past.push(snap)
+    historyIndexRef.current = past.length - 1
+    if (past.length > 50) {
+      past.shift()
+      historyIndexRef.current--
+    }
+    try {
+      localStorage.setItem(AVNAC_STORAGE_KEY, ser)
+    } catch {
+      /* ignore */
+    }
+  }, [ready, captureDoc])
+
+  const undo = useCallback(async () => {
+    if (applyingHistoryRef.current) return
+    const past = historySnapshotsRef.current
+    let idx = historyIndexRef.current
+    if (idx <= 0) return
+    idx -= 1
+    historyIndexRef.current = idx
+    await applyDoc(past[idx]!)
+  }, [applyDoc])
+
+  const redo = useCallback(async () => {
+    if (applyingHistoryRef.current) return
+    const past = historySnapshotsRef.current
+    let idx = historyIndexRef.current
+    if (idx >= past.length - 1) return
+    idx += 1
+    historyIndexRef.current = idx
+    await applyDoc(past[idx]!)
+  }, [applyDoc])
+
+  useEffect(() => {
+    if (!ready) return
+    if (historyInitRef.current) return
+    historyInitRef.current = true
+    const s = captureDoc()
+    historySnapshotsRef.current = [s]
+    historyIndexRef.current = 0
+  }, [ready, captureDoc])
+
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas || !ready) return
+    let textTimer: ReturnType<typeof setTimeout> | null = null
+    const bump = () => {
+      if (applyingHistoryRef.current) return
+      commitHistory()
+    }
+    const onText = () => {
+      if (applyingHistoryRef.current) return
+      if (textTimer) clearTimeout(textTimer)
+      textTimer = setTimeout(bump, 450)
+    }
+    canvas.on('object:modified', bump)
+    canvas.on('object:added', bump)
+    canvas.on('object:removed', bump)
+    canvas.on('text:changed', onText)
+    return () => {
+      canvas.off('object:modified', bump)
+      canvas.off('object:added', bump)
+      canvas.off('object:removed', bump)
+      canvas.off('text:changed', onText)
+      if (textTimer) clearTimeout(textTimer)
+    }
+  }, [ready, commitHistory])
+
+  useEffect(() => {
+    if (!ready) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.closest('input, textarea, [contenteditable="true"]')) return
+      const c = fabricCanvasRef.current
+      const mod = fabricModRef.current
+      const a = c?.getActiveObject()
+      if (
+        a &&
+        mod?.IText &&
+        a instanceof mod.IText &&
+        a.isEditing
+      ) {
+        return
+      }
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        setShortcutsOpen(true)
+        return
+      }
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault()
+          if (e.shiftKey) void redo()
+          else void undo()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ready, undo, redo])
+
+  const exportPng = useCallback((opts?: ExportPngOptions) => {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
-    const data = canvas.toDataURL({ format: 'png', multiplier: 1 })
+    const mult = opts?.multiplier ?? 1
+    const transparent = opts?.transparent ?? false
+    const crop = opts?.crop ?? 'none'
+    const aw = artboardWRef.current
+    const ah = artboardHRef.current
+
+    let left = 0
+    let top = 0
+    let width = aw
+    let height = ah
+
+    if (crop === 'selection') {
+      const a = canvas.getActiveObject()
+      if (a) {
+        const br = a.getBoundingRect()
+        left = br.left
+        top = br.top
+        width = Math.max(1, br.width)
+        height = Math.max(1, br.height)
+      }
+    } else if (crop === 'content') {
+      const objs = canvas.getObjects()
+      if (objs.length) {
+        let minX = Infinity
+        let minY = Infinity
+        let maxX = -Infinity
+        let maxY = -Infinity
+        for (const o of objs) {
+          const br = o.getBoundingRect()
+          minX = Math.min(minX, br.left)
+          minY = Math.min(minY, br.top)
+          maxX = Math.max(maxX, br.left + br.width)
+          maxY = Math.max(maxY, br.top + br.height)
+        }
+        const pad = 32
+        left = Math.max(0, minX - pad)
+        top = Math.max(0, minY - pad)
+        width = Math.max(1, Math.min(aw, maxX + pad) - left)
+        height = Math.max(1, Math.min(ah, maxY + pad) - top)
+      }
+    }
+
+    const prevBg = canvas.backgroundColor
+    if (transparent) {
+      canvas.backgroundColor = 'transparent'
+      canvas.requestRenderAll()
+    }
+
+    const data = canvas.toDataURL({
+      format: 'png',
+      multiplier: mult,
+      left,
+      top,
+      width,
+      height,
+    })
+
+    if (transparent) {
+      canvas.backgroundColor = prevBg
+      canvas.requestRenderAll()
+    }
+
     const a = document.createElement('a')
     a.href = data
-    a.download = 'avnac-design.png'
+    a.download =
+      crop === 'none' ? 'avnac-design.png' : 'avnac-design-cropped.png'
     a.click()
   }, [])
 
-  useImperativeHandle(ref, () => ({ exportPng }), [exportPng])
+  const saveDocument = useCallback(() => {
+    const doc = captureDoc()
+    const blob = new Blob([JSON.stringify(doc, null, 2)], {
+      type: 'application/json',
+    })
+    const u = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = u
+    a.download = 'avnac-document.json'
+    a.click()
+    URL.revokeObjectURL(u)
+  }, [captureDoc])
+
+  const loadDocument = useCallback(
+    async (file: File) => {
+      const text = await file.text()
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(text)
+      } catch {
+        return
+      }
+      const doc = parseAvnacDocument(parsed)
+      if (!doc) return
+      await applyDoc(doc)
+      queueMicrotask(() => {
+        zoomUserAdjustedRef.current = false
+        fitArtboardToViewport()
+        const next = captureDoc()
+        historySnapshotsRef.current = [next]
+        historyIndexRef.current = 0
+      })
+    },
+    [applyDoc, captureDoc, fitArtboardToViewport],
+  )
+
+  useImperativeHandle(
+    ref,
+    () => ({ exportPng, saveDocument, loadDocument }),
+    [exportPng, saveDocument, loadDocument],
+  )
 
   const onReadyChangeRef = useRef(onReadyChange)
   onReadyChangeRef.current = onReadyChange
@@ -1634,8 +2080,116 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     onReadyChangeRef.current?.(ready)
   }, [ready])
 
-  function onBackgroundPicked(v: BgValue) {
-    setBgValue(v)
+  const onBackgroundPicked = useCallback(
+    (v: BgValue) => {
+      setBgValue(v)
+      queueMicrotask(() => {
+        if (!applyingHistoryRef.current) commitHistory()
+      })
+    },
+    [commitHistory],
+  )
+
+  const layerRows: EditorLayerRow[] = useMemo(() => {
+    const c = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!c || !mod || !layersOpen) return []
+    void selectionRev
+    const stack = c.getObjects()
+    const objs = [...stack].reverse()
+    const active = c.getActiveObject()
+    return objs.map((o, uiIdx) => {
+      const stackIndex = stack.length - 1 - uiIdx
+      let selected = false
+      if (
+        active &&
+        mod.ActiveSelection &&
+        active instanceof mod.ActiveSelection
+      ) {
+        selected = active.getObjects().includes(o)
+      } else if (active) {
+        selected = active === o
+      }
+      return {
+        id: `${stackIndex}-${o.type}-${uiIdx}`,
+        index: stackIndex,
+        label: fabricObjectLabel(o, mod),
+        visible: o.visible !== false,
+        selected,
+      }
+    })
+  }, [layersOpen, selectionRev, ready])
+
+  const onSelectLayer = useCallback((stackIndex: number) => {
+    const c = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!c || !mod) return
+    const o = c.getObjects()[stackIndex]
+    if (!o) return
+    c.setActiveObject(o)
+    c.requestRenderAll()
+    selectionTick()
+  }, [])
+
+  const onToggleLayerVisible = useCallback((stackIndex: number) => {
+    const c = fabricCanvasRef.current
+    if (!c) return
+    const o = c.getObjects()[stackIndex]
+    if (!o) return
+    o.set('visible', !o.visible)
+    c.requestRenderAll()
+    selectionTick()
+  }, [])
+
+  const onLayerBringForward = useCallback((stackIndex: number) => {
+    const c = fabricCanvasRef.current
+    if (!c) return
+    const o = c.getObjects()[stackIndex]
+    if (!o) return
+    c.bringObjectForward(o)
+    c.requestRenderAll()
+    selectionTick()
+  }, [])
+
+  const onLayerSendBackward = useCallback((stackIndex: number) => {
+    const c = fabricCanvasRef.current
+    if (!c) return
+    const o = c.getObjects()[stackIndex]
+    if (!o) return
+    c.sendObjectBackwards(o)
+    c.requestRenderAll()
+    selectionTick()
+  }, [])
+
+  function addImageFromFiles(files: FileList | null) {
+    const f = files?.[0]
+    if (!f || !f.type.startsWith('image/')) return
+    const canvas = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!canvas || !mod?.FabricImage) return
+    const url = URL.createObjectURL(f)
+    void mod.FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then(
+      (img) => {
+        img.set({
+          left: artboardW / 2,
+          top: artboardH / 2,
+          originX: 'center',
+          originY: 'center',
+        })
+        const maxW = artboardW * 0.6
+        const maxH = artboardH * 0.6
+        const iw = img.width || 1
+        const ih = img.height || 1
+        if (iw > maxW || ih > maxH) {
+          const sc = Math.min(maxW / iw, maxH / ih)
+          img.scale(sc)
+        }
+        canvas.add(img)
+        canvas.setActiveObject(img)
+        canvas.requestRenderAll()
+        syncSelection()
+      },
+    )
   }
 
   let elementToolbarLockedDisplay = false
@@ -1651,6 +2205,8 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       if (a) {
         elementToolbarAlignAlready = artboardAlignAlreadySatisfied(
           a.getBoundingRect(),
+          artboardW,
+          artboardH,
         )
         if (mod.ActiveSelection && a instanceof mod.ActiveSelection) {
           const objs = a.getObjects()
@@ -1684,6 +2240,16 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          addImageFromFiles(e.target.files)
+          e.target.value = ''
+        }}
+      />
       <div
         ref={selectionToolsRef}
         className="pointer-events-auto relative z-30 flex h-14 w-full shrink-0 items-center justify-center px-1 sm:px-2"
@@ -1824,24 +2390,32 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
               }}
             >
               <canvas ref={canvasElRef} className="block max-w-none" />
-              {ready &&
-              (artboardSnapGuides.vertical || artboardSnapGuides.horizontal) ? (
+              {ready && sceneSnapGuides.length > 0 ? (
                 <div
                   className="pointer-events-none absolute inset-0 z-[5]"
                   aria-hidden
                 >
-                  {artboardSnapGuides.vertical ? (
-                    <div
-                      className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2"
-                      style={{ backgroundColor: EDITOR_ACCENT_PURPLE }}
-                    />
-                  ) : null}
-                  {artboardSnapGuides.horizontal ? (
-                    <div
-                      className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2"
-                      style={{ backgroundColor: EDITOR_ACCENT_PURPLE }}
-                    />
-                  ) : null}
+                  {sceneSnapGuides.map((g, i) =>
+                    g.axis === 'v' ? (
+                      <div
+                        key={`v-${i}-${g.pos}`}
+                        className="absolute bottom-0 top-0 w-px -translate-x-1/2"
+                        style={{
+                          left: `${(g.pos / artboardW) * 100}%`,
+                          backgroundColor: EDITOR_ACCENT_PURPLE,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        key={`h-${i}-${g.pos}`}
+                        className="absolute left-0 right-0 h-px -translate-y-1/2"
+                        style={{
+                          top: `${(g.pos / artboardH) * 100}%`,
+                          backgroundColor: EDITOR_ACCENT_PURPLE,
+                        }}
+                      />
+                    ),
+                  )}
                 </div>
               ) : null}
             </div>
@@ -1861,9 +2435,33 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                 onChange={onZoomSliderChange}
                 onFitRequest={onZoomFitRequest}
               />
-              <div className="pr-1 text-xs tabular-nums text-[var(--text-muted)]">
-                {ARTBOARD_W}×{ARTBOARD_H}px
-              </div>
+              <label className="flex items-center gap-1 pr-1 text-xs text-[var(--text-muted)]">
+                <span className="tabular-nums">
+                  {artboardW}×{artboardH}px
+                </span>
+                <select
+                  className="max-w-[140px] rounded-md border border-black/10 bg-[var(--surface)] px-1 py-0.5 text-[11px] font-medium text-[var(--text)]"
+                  aria-label="Artboard preset"
+                  value={
+                    ARTBOARD_PRESETS.find(
+                      (p) => p.width === artboardW && p.height === artboardH,
+                    )?.id ?? 'custom'
+                  }
+                  onChange={(e) => {
+                    const id = e.target.value
+                    if (id === 'custom') return
+                    const p = ARTBOARD_PRESETS.find((x) => x.id === id)
+                    if (p) setArtboardSize({ w: p.width, h: p.height })
+                  }}
+                >
+                  <option value="custom">Custom size</option>
+                  {ARTBOARD_PRESETS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </>
           ) : null}
         </div>
@@ -1932,6 +2530,36 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           >
             <HugeiconsIcon icon={TextFontIcon} size={20} strokeWidth={1.75} />
           </button>
+          <button
+            type="button"
+            disabled={!ready}
+            className={toolbarIconBtn(!ready)}
+            onClick={() => imageInputRef.current?.click()}
+            aria-label="Add image"
+            title="Add image"
+          >
+            <HugeiconsIcon icon={Image01Icon} size={20} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            disabled={!ready}
+            className={`${toolbarIconBtn(!ready)} ${layersOpen ? 'bg-black/[0.08]' : ''}`}
+            onClick={() => setLayersOpen((o) => !o)}
+            aria-label="Layers"
+            title="Layers"
+          >
+            <HugeiconsIcon icon={Layers02Icon} size={20} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            disabled={!ready}
+            className={toolbarIconBtn(!ready)}
+            onClick={() => setShortcutsOpen(true)}
+            aria-label="Keyboard shortcuts"
+            title="Shortcuts (?)"
+          >
+            <HugeiconsIcon icon={HelpCircleIcon} size={20} strokeWidth={1.75} />
+          </button>
 
           {!ready ? (
             <span className="px-3 text-xs text-[var(--text-muted)]">
@@ -1948,6 +2576,19 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           </span>
         </div>
       ) : null}
+      <EditorLayersPanel
+        open={layersOpen}
+        onClose={() => setLayersOpen(false)}
+        rows={layerRows}
+        onSelectLayer={onSelectLayer}
+        onToggleVisible={onToggleLayerVisible}
+        onBringForward={onLayerBringForward}
+        onSendBackward={onLayerSendBackward}
+      />
+      <EditorShortcutsModal
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+      />
       {ready && transformDimensionUi
         ? createPortal(
             <div
