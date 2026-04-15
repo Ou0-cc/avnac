@@ -2167,29 +2167,34 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
     if (!canvas || !mod?.FabricImage) return
-    const url = URL.createObjectURL(f)
-    void mod.FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then(
-      (img) => {
-        img.set({
-          left: artboardW / 2,
-          top: artboardH / 2,
-          originX: 'center',
-          originY: 'center',
-        })
-        const maxW = artboardW * 0.6
-        const maxH = artboardH * 0.6
-        const iw = img.width || 1
-        const ih = img.height || 1
-        if (iw > maxW || ih > maxH) {
-          const sc = Math.min(maxW / iw, maxH / ih)
-          img.scale(sc)
-        }
-        canvas.add(img)
-        canvas.setActiveObject(img)
-        canvas.requestRenderAll()
-        syncSelection()
-      },
-    )
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result
+      if (typeof dataUrl !== 'string') return
+      void mod.FabricImage.fromURL(dataUrl, { crossOrigin: 'anonymous' }).then(
+        (img) => {
+          img.set({
+            left: artboardW / 2,
+            top: artboardH / 2,
+            originX: 'center',
+            originY: 'center',
+          })
+          const maxW = artboardW * 0.6
+          const maxH = artboardH * 0.6
+          const iw = img.width || 1
+          const ih = img.height || 1
+          if (iw > maxW || ih > maxH) {
+            const sc = Math.min(maxW / iw, maxH / ih)
+            img.scale(sc)
+          }
+          canvas.add(img)
+          canvas.setActiveObject(img)
+          canvas.requestRenderAll()
+          syncSelection()
+        },
+      )
+    }
+    reader.readAsDataURL(f)
   }
 
   let elementToolbarLockedDisplay = false
