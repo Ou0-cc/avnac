@@ -2,7 +2,6 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowDown01Icon,
   BackgroundIcon,
-  Delete02Icon,
   TextFontIcon,
 } from '@hugeicons/core-free-icons'
 import type { Canvas, FabricObject, IText } from 'fabric'
@@ -64,6 +63,7 @@ import {
 import { linearGradientForBox } from '../lib/fabric-linear-gradient'
 import { loadGoogleFontFamily } from '../lib/load-google-font'
 import ShapeOptionsToolbar from './shape-options-toolbar'
+import TransparencyToolbarPopover from './transparency-toolbar-popover'
 import ShapesPopover, {
   iconForShapesQuickAdd,
   type PopoverShapeKind,
@@ -79,6 +79,7 @@ import CanvasZoomSlider from './canvas-zoom-slider'
 import CanvasElementToolbar, {
   type CanvasAlignKind,
 } from './canvas-element-toolbar'
+import { FloatingToolbarShell } from './floating-toolbar-shell'
 import { getAvnacLocked, setAvnacLocked } from '../lib/avnac-object-lock'
 
 const ARTBOARD_W = 4000
@@ -226,6 +227,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     meta: AvnacShapeMeta
     paint: BgValue
   } | null>(null)
+  const [selectionOpacityPct, setSelectionOpacityPct] = useState(100)
   const [artboardSnapGuides, setArtboardSnapGuides] = useState({
     vertical: false,
     horizontal: false,
@@ -309,6 +311,34 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     obj.setCoords()
   }, [])
 
+  const syncSelectionOpacity = useCallback(() => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas) {
+      setSelectionOpacityPct(100)
+      return
+    }
+    const active = canvas.getActiveObject()
+    if (!active) {
+      setSelectionOpacityPct(100)
+      return
+    }
+    if ('multiSelectionStacking' in active) {
+      const objs = canvas.getActiveObjects()
+      if (objs.length === 0) {
+        setSelectionOpacityPct(100)
+        return
+      }
+      let sum = 0
+      for (const o of objs) {
+        sum += typeof o.opacity === 'number' ? o.opacity : 1
+      }
+      setSelectionOpacityPct(Math.round((sum / objs.length) * 100))
+      return
+    }
+    const op = typeof active.opacity === 'number' ? active.opacity : 1
+    setSelectionOpacityPct(Math.round(op * 100))
+  }, [])
+
   const onTextFormatChange = useCallback(
     (patch: Partial<TextFormatToolbarValues>) => {
       const canvas = fabricCanvasRef.current
@@ -380,6 +410,31 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     [syncTextToolbar, syncShapeToolbar],
   )
 
+  const applyOpacityToSelection = useCallback(
+    (pct: number) => {
+      const canvas = fabricCanvasRef.current
+      if (!canvas) return
+      const active = canvas.getActiveObject()
+      if (!active) return
+      const clamped = Math.max(0, Math.min(100, Math.round(pct)))
+      const v = clamped / 100
+      if ('multiSelectionStacking' in active) {
+        for (const o of canvas.getActiveObjects()) {
+          o.set('opacity', v)
+          o.setCoords()
+        }
+      } else {
+        active.set('opacity', v)
+        active.setCoords()
+      }
+      canvas.requestRenderAll()
+      setSelectionOpacityPct(clamped)
+      syncTextToolbar()
+      syncShapeToolbar()
+    },
+    [syncTextToolbar, syncShapeToolbar],
+  )
+
   const syncSelection = useCallback(() => {
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
@@ -387,6 +442,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const obj = canvas.getActiveObject()
     setHasObjectSelected(!!obj)
     if (!obj || !mod) {
+      setSelectionOpacityPct(100)
       selectionTick()
       return
     }
@@ -403,8 +459,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     } else {
       setSelectedPaint(bgValueFromFabricFill(obj))
     }
+    syncSelectionOpacity()
     selectionTick()
-  }, [])
+  }, [syncSelectionOpacity])
 
   const syncFillFromSelection = useCallback(() => {
     const canvas = fabricCanvasRef.current
@@ -629,6 +686,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         selectionTick()
         syncTextToolbar()
         syncShapeToolbar()
+        syncSelectionOpacity()
       }
       const onClear = () => {
         setHasObjectSelected(false)
@@ -636,6 +694,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         setSelectedPaint(DEFAULT_PAINT)
         setTextToolbarValues(null)
         setShapeToolbarModel(null)
+        setSelectionOpacityPct(100)
         selectionTick()
       }
 
@@ -701,7 +760,12 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       setReady(false)
       void c?.dispose()
     }
-  }, [syncFillFromSelection, syncTextToolbar, syncShapeToolbar])
+  }, [
+    syncFillFromSelection,
+    syncTextToolbar,
+    syncShapeToolbar,
+    syncSelectionOpacity,
+  ])
 
   useEffect(() => {
     if (!ready) return
@@ -804,7 +868,8 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
   useLayoutEffect(() => {
     if (!ready) return
     syncShapeToolbar()
-  }, [ready, selectionRev, zoomPercent, syncShapeToolbar])
+    syncSelectionOpacity()
+  }, [ready, selectionRev, zoomPercent, syncShapeToolbar, syncSelectionOpacity])
 
   useLayoutEffect(() => {
     if (!ready) return
@@ -1519,6 +1584,13 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     }
   }
 
+  const selectionTransparencySlot = hasObjectSelected ? (
+    <TransparencyToolbarPopover
+      opacityPct={selectionOpacityPct}
+      onChange={applyOpacityToSelection}
+    />
+  ) : null
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
@@ -1529,6 +1601,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           <TextFormatToolbar
             values={textToolbarValues}
             onChange={onTextFormatChange}
+            footerSlot={selectionTransparencySlot}
           />
         ) : null}
         {ready && !textToolbarValues && shapeToolbarModel ? (
@@ -1542,7 +1615,18 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
             onArrowRoundedEnds={applyArrowRoundedEnds}
             onArrowStrokeWidth={applyArrowStrokeWidth}
             onArrowPathType={applyArrowPathType}
+            footerSlot={selectionTransparencySlot}
           />
+        ) : null}
+        {ready &&
+        hasObjectSelected &&
+        !textToolbarValues &&
+        !shapeToolbarModel ? (
+          <FloatingToolbarShell role="toolbar" aria-label="Selection">
+            <div className="flex items-center py-1 pl-2 pr-2">
+              {selectionTransparencySlot}
+            </div>
+          </FloatingToolbarShell>
         ) : null}
         {ready &&
         !textToolbarValues &&
@@ -1754,16 +1838,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
             title="Add text"
           >
             <HugeiconsIcon icon={TextFontIcon} size={20} strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            disabled={!ready || !hasObjectSelected}
-            className={toolbarIconBtn(!ready || !hasObjectSelected)}
-            onClick={deleteSelection}
-            aria-label="Delete"
-            title="Delete"
-          >
-            <HugeiconsIcon icon={Delete02Icon} size={20} strokeWidth={1.75} />
           </button>
 
           {!ready ? (
