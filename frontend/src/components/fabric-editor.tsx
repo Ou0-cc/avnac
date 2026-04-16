@@ -730,17 +730,34 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       if (targets.length === 0) return
       const w = Math.max(0, Math.min(40, Math.round(px)))
       for (const o of targets) {
+        if (w > 0) {
+          const s = o.stroke
+          const noStrokePaint =
+            s == null ||
+            s === '' ||
+            (typeof s === 'string' && s === 'transparent')
+          if (noStrokePaint) {
+            applyBgValueToStroke(mod, o, selectionOutlineStrokePaint)
+          }
+        }
         o.set({ strokeWidth: w })
         o.set('dirty', true)
         o.setCoords()
       }
       canvas.requestRenderAll()
       setSelectionOutlineStrokeWidth(w)
+      syncSelectionStroke()
       syncTextToolbar()
       syncShapeToolbar()
       persistAfterMutation(canvas, active)
     },
-    [persistAfterMutation, syncShapeToolbar, syncTextToolbar],
+    [
+      persistAfterMutation,
+      selectionOutlineStrokePaint,
+      syncSelectionStroke,
+      syncShapeToolbar,
+      syncTextToolbar,
+    ],
   )
 
   const applyOutlineStrokePaint = useCallback(
@@ -756,16 +773,21 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       if (targets.length === 0) return
       for (const o of targets) {
         applyBgValueToStroke(mod, o, v)
+        const sw = typeof o.strokeWidth === 'number' ? o.strokeWidth : 0
+        if (sw <= 0) {
+          o.set({ strokeWidth: 2 })
+        }
         o.set('dirty', true)
         o.setCoords()
       }
       canvas.requestRenderAll()
       setSelectionOutlineStrokePaint(v)
+      syncSelectionStroke()
       syncTextToolbar()
       syncShapeToolbar()
       persistAfterMutation(canvas, active)
     },
-    [persistAfterMutation, syncShapeToolbar, syncTextToolbar],
+    [persistAfterMutation, syncSelectionStroke, syncShapeToolbar, syncTextToolbar],
   )
 
   const applyShadowToSelection = useCallback(
