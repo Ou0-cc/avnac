@@ -1,7 +1,6 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowDown01Icon,
-  BackgroundIcon,
   HelpCircleIcon,
   Image01Icon,
   CropIcon,
@@ -2735,6 +2734,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                 width={artboardW}
                 height={artboardH}
                 onResize={onArtboardResize}
+                viewportRef={viewportRef}
               />
               <FloatingToolbarDivider />
               <button
@@ -2746,11 +2746,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                 aria-haspopup="dialog"
                 title="Background"
               >
-                <HugeiconsIcon
-                  icon={BackgroundIcon}
-                  size={20}
-                  strokeWidth={1.75}
-                />
                 <span
                   className="h-5 w-5 shrink-0 rounded-md border border-black/15 shadow-inner"
                   style={bgValueToSwatch(bgValue)}
