@@ -5,11 +5,21 @@ import {
   FolderOpenIcon,
 } from '@hugeicons/core-free-icons'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import EditorExportMenu from '../components/editor-export-menu'
 import FabricEditor, { type FabricEditorHandle } from '../components/fabric-editor'
 
+type CreateSearch = {
+  id?: string
+}
+
 export const Route = createFileRoute('/create')({
+  validateSearch: (raw: Record<string, unknown>): CreateSearch => {
+    const id = raw.id
+    return {
+      id: typeof id === 'string' && id.length > 0 ? id : undefined,
+    }
+  },
   component: CreatePage,
 })
 
@@ -17,6 +27,22 @@ function CreatePage() {
   const editorRef = useRef<FabricEditorHandle>(null)
   const loadInputRef = useRef<HTMLInputElement>(null)
   const [editorReady, setEditorReady] = useState(false)
+  const search = Route.useSearch()
+  const id = search.id
+  const navigate = Route.useNavigate()
+
+  useLayoutEffect(() => {
+    if (id) return
+    void navigate({
+      to: '/create',
+      search: { id: crypto.randomUUID() },
+      replace: true,
+    })
+  }, [id, navigate])
+
+  if (!id) {
+    return null
+  }
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-[var(--surface-subtle)]">
@@ -77,7 +103,11 @@ function CreatePage() {
         </div>
       </header>
       <div className="flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-4 sm:py-4">
-        <FabricEditor ref={editorRef} onReadyChange={setEditorReady} />
+        <FabricEditor
+          ref={editorRef}
+          persistId={id}
+          onReadyChange={setEditorReady}
+        />
       </div>
     </div>
   )
