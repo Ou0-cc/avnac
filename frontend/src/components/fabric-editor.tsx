@@ -3576,7 +3576,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       {vectorWorkspaceId ? (
         <VectorBoardWorkspace
           open
-          boardId={vectorWorkspaceId}
           boardName={vectorWorkspaceName}
           document={
             vectorBoardDocs[vectorWorkspaceId] ?? emptyVectorBoardDocument()
