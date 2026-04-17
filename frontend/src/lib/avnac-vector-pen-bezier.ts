@@ -58,6 +58,15 @@ export function samplePenAnchorsToPolyline(
   if (!closed) {
     const last = anchors[anchors.length - 1]!
     out.push([last.x, last.y])
+  } else if (out.length > 0) {
+    const f = out[0]!
+    const last = out[out.length - 1]!
+    if (
+      (f[0] - last[0]) * (f[0] - last[0]) + (f[1] - last[1]) * (f[1] - last[1]) >
+      1e-16
+    ) {
+      out.push([f[0], f[1]])
+    }
   }
   return out
 }
