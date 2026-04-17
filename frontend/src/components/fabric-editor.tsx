@@ -811,10 +811,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       if (targets.length === 0) return
       for (const o of targets) {
         applyBgValueToStroke(mod, o, v)
-        const sw = typeof o.strokeWidth === 'number' ? o.strokeWidth : 0
-        if (sw <= 0) {
-          o.set({ strokeWidth: 2 })
-        }
         o.set('dirty', true)
         o.setCoords()
       }
@@ -2672,6 +2668,56 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     setVectorWorkspaceId(null)
   }, [])
 
+  const deleteVectorBoard = useCallback(
+    (boardId: string) => {
+      const canvas = fabricCanvasRef.current
+      const mod = fabricModRef.current
+      if (canvas && mod) {
+        const toRemove: FabricObject[] = []
+        for (const o of canvas.getObjects()) {
+          if (!(o instanceof mod.Group)) continue
+          const wid = (
+            o as FabricObject & { avnacVectorBoardId?: string }
+          ).avnacVectorBoardId
+          if (wid === boardId) toRemove.push(o)
+        }
+        if (toRemove.length > 0) {
+          const active = canvas.getActiveObject()
+          if (active) {
+            if (toRemove.includes(active)) {
+              canvas.discardActiveObject()
+            } else if (
+              mod.ActiveSelection &&
+              active instanceof mod.ActiveSelection
+            ) {
+              const inSel = active
+                .getObjects()
+                .some((o) => toRemove.includes(o))
+              if (inSel) canvas.discardActiveObject()
+            }
+          }
+          for (const o of toRemove) canvas.remove(o)
+          canvas.requestRenderAll()
+          setHasObjectSelected(!!canvas.getActiveObject())
+          setCanvasBodySelected(!canvas.getActiveObject())
+          selectionTick()
+          syncTextToolbar()
+          syncShapeToolbar()
+        }
+      }
+
+      setVectorWorkspaceId((cur) => (cur === boardId ? null : cur))
+      setVectorBoards((prev) => prev.filter((b) => b.id !== boardId))
+      setVectorBoardDocs((prev) => {
+        const next = { ...prev }
+        delete next[boardId]
+        vectorBoardDocsRef.current = next
+        return next
+      })
+    },
+    [syncShapeToolbar, syncTextToolbar],
+  )
+
   const vectorWorkspaceName = useMemo(() => {
     if (!vectorWorkspaceId) return ''
     return (
@@ -2804,6 +2850,22 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         return
       }
       if (e.metaKey || e.ctrlKey) {
+        if (
+          !vectorWorkspaceId &&
+          (e.key === 'c' || e.key === 'C')
+        ) {
+          e.preventDefault()
+          void copyElementToClipboard()
+          return
+        }
+        if (
+          !vectorWorkspaceId &&
+          (e.key === 'v' || e.key === 'V')
+        ) {
+          e.preventDefault()
+          void pasteFromClipboard()
+          return
+        }
         if (e.key === 'z' || e.key === 'Z') {
           e.preventDefault()
           if (e.shiftKey) void redo()
@@ -2813,7 +2875,14 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ready, undo, redo])
+  }, [
+    ready,
+    undo,
+    redo,
+    vectorWorkspaceId,
+    copyElementToClipboard,
+    pasteFromClipboard,
+  ])
 
   const exportPng = useCallback((opts?: ExportPngOptions) => {
     const canvas = fabricCanvasRef.current
@@ -3573,6 +3642,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         boardDocs={vectorBoardDocs}
         onCreateNew={createVectorBoard}
         onOpenBoard={openVectorBoardWorkspace}
+        onDeleteBoard={deleteVectorBoard}
       />
       {vectorWorkspaceId ? (
         <VectorBoardWorkspace
