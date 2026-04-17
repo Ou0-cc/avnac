@@ -14,9 +14,19 @@ const ROWS: ShortcutRow[] = [
   { keys: 'Delete / Backspace', action: 'Delete selection' },
   { keys: 'Option/Alt + drag', action: 'Duplicate while dragging (canvas)' },
   {
-    keys: 'Vector board',
+    keys: 'Vector board — selection',
     action:
-      'Shift+click to multi-select; drag empty area to marquee; Shift+drag marquee = additive; Delete/Backspace removes selection; Cmd/Ctrl+C/V; Alt+drag duplicates; Shift while drawing constrains rect/ellipse to a square/circle',
+      'Shift+click multi-selects; drag empty area marquees; Shift+drag marquee = additive; Delete/Backspace removes; Cmd/Ctrl+C/V copies/pastes; Alt+drag duplicates; Arrow nudges 1px (Shift = 10px)',
+  },
+  {
+    keys: 'Vector board — transform',
+    action:
+      'Drag selection handles to resize (Shift = proportional, Alt = from center); double-click a pen shape to edit its anchors, then Alt+click to remove an anchor, Esc to exit',
+  },
+  {
+    keys: 'Vector board — view / z-order',
+    action:
+      'Space+drag or middle-click drag to pan; Cmd/Ctrl+wheel zooms; Cmd/Ctrl+0 resets, Cmd/Ctrl+1 fits, Cmd/Ctrl+=/- zooms; Cmd/Ctrl+] / [ moves selection forward/backward (add Shift for front/back)',
   },
   { keys: '?', action: 'Show shortcuts' },
 ]
