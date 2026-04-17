@@ -14,6 +14,11 @@ const ROWS: ShortcutRow[] = [
   { keys: 'Delete / Backspace', action: 'Delete selection' },
   { keys: 'Option/Alt + drag', action: 'Duplicate while dragging (canvas)' },
   {
+    keys: 'Vector board — tools',
+    action:
+      'V = Move, P = Pen, Shift+P = Pencil, R = Rectangle, O = Ellipse',
+  },
+  {
     keys: 'Vector board — selection',
     action:
       'Shift+click multi-selects; drag empty area marquees; Shift+drag marquee = additive; Delete/Backspace removes; Cmd/Ctrl+C/V copies/pastes; Alt+drag duplicates; Arrow nudges 1px (Shift = 10px)',
