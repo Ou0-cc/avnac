@@ -12,7 +12,12 @@ const ROWS: ShortcutRow[] = [
   { keys: 'Arrow keys', action: 'Nudge selection 1px' },
   { keys: 'Shift + Arrow keys', action: 'Nudge selection 5px' },
   { keys: 'Delete / Backspace', action: 'Delete selection' },
-  { keys: 'Option/Alt + drag', action: 'Duplicate while dragging' },
+  { keys: 'Option/Alt + drag', action: 'Duplicate while dragging (canvas)' },
+  {
+    keys: 'Vector board',
+    action:
+      'Shift+click to multi-select; drag empty area to marquee; Shift+drag marquee = additive; Delete/Backspace removes selection; Cmd/Ctrl+C/V; Alt+drag duplicates; Shift while drawing constrains rect/ellipse to a square/circle',
+  },
   { keys: '?', action: 'Show shortcuts' },
 ]
 
