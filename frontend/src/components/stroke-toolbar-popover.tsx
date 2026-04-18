@@ -7,7 +7,7 @@ import PaintPopoverControl from './paint-popover-control'
 import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
 import {
   floatingToolbarIconButton,
-  floatingToolbarPopoverClass,
+  floatingToolbarPopoverMenuClass,
 } from './floating-toolbar-shell'
 
 const PANEL_ESTIMATE_H = 340
@@ -82,7 +82,7 @@ export default function StrokeToolbarPopover({
           className={[
             'absolute left-1/2 z-[70] min-w-[15rem] p-3',
             openUpward ? 'bottom-full mb-2' : 'top-full mt-2',
-            floatingToolbarPopoverClass,
+            floatingToolbarPopoverMenuClass,
           ].join(' ')}
           style={{
             transform: `translateX(calc(-50% + ${shiftX}px))`,
