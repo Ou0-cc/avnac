@@ -7,7 +7,7 @@ import {
   GeometricShapes02Icon,
   LinerIcon,
   PolygonIcon,
-  RectangularIcon,
+  SquareIcon,
   StarIcon,
 } from '@hugeicons/core-free-icons'
 
@@ -22,7 +22,7 @@ export type PopoverShapeKind =
 export type ShapesQuickAddKind = PopoverShapeKind | 'generic'
 
 export const SHAPE_KIND_ICONS: Record<PopoverShapeKind, IconSvgElement> = {
-  rect: RectangularIcon,
+  rect: SquareIcon,
   ellipse: CircleIcon,
   polygon: PolygonIcon,
   star: StarIcon,
@@ -37,7 +37,7 @@ export function iconForShapesQuickAdd(kind: ShapesQuickAddKind): IconSvgElement 
 type Item = { kind: PopoverShapeKind; label: string; icon: IconSvgElement }
 
 const ITEMS: Item[] = [
-  { kind: 'rect', label: 'Rectangle', icon: SHAPE_KIND_ICONS.rect },
+  { kind: 'rect', label: 'Square', icon: SHAPE_KIND_ICONS.rect },
   { kind: 'ellipse', label: 'Ellipse', icon: SHAPE_KIND_ICONS.ellipse },
   { kind: 'polygon', label: 'Polygon', icon: SHAPE_KIND_ICONS.polygon },
   { kind: 'star', label: 'Star', icon: SHAPE_KIND_ICONS.star },

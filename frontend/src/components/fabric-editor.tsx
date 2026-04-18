@@ -226,8 +226,8 @@ function artboardAlignAlreadySatisfied(
 }
 
 const QUICK_SHAPE_TITLE: Record<ShapesQuickAddKind, string> = {
-  generic: 'Add rectangle',
-  rect: 'Add rectangle',
+  generic: 'Add square',
+  rect: 'Add square',
   ellipse: 'Add ellipse',
   polygon: 'Add polygon',
   star: 'Add star',
@@ -1888,14 +1888,15 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
     if (!canvas || !mod) return
+    const side = Math.round(Math.min(artboardW, artboardH) * 0.18)
     const r = new mod.Rect({
-      left: artboardW / 2 - layout.rectW / 2,
-      top: artboardH / 2 - layout.rectH / 2,
-      width: layout.rectW,
-      height: layout.rectH,
+      left: artboardW / 2 - side / 2,
+      top: artboardH / 2 - side / 2,
+      width: side,
+      height: side,
       fill: bgValueSolidFallback(selectedPaint),
-      rx: layout.rectRx,
-      ry: layout.rectRx,
+      rx: 0,
+      ry: 0,
     })
     setAvnacShapeMeta(r, { kind: 'rect' })
     applyBgValueToFill(mod, r, selectedPaint)
