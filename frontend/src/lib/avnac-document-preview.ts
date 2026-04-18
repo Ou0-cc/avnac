@@ -34,6 +34,12 @@ export function avnacDocumentPreviewCacheKey(
   return `${persistId}:${updatedAt}`
 }
 
+export function avnacDocumentPreviewEvictPersistId(persistId: string) {
+  for (const k of [...previewCache.keys()]) {
+    if (k.startsWith(`${persistId}:`)) previewCache.delete(k)
+  }
+}
+
 export async function renderAvnacDocumentPreviewDataUrl(
   doc: AvnacDocumentV1,
   persistId: string,
