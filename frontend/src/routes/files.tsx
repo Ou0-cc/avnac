@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import FileGridPreview from '../components/file-grid-preview'
+import NewCanvasDialog from '../components/new-canvas-dialog'
 import {
   idbListDocuments,
   type AvnacEditorIdbListItem,
@@ -24,6 +25,7 @@ function formatUpdatedAt(ts: number): string {
 function FilesPage() {
   const [items, setItems] = useState<AvnacEditorIdbListItem[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [newCanvasOpen, setNewCanvasOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -51,12 +53,13 @@ function FilesPage() {
       <div className="relative z-[1] flex flex-1 flex-col">
         <header className="px-5 pt-4 sm:px-8 sm:pt-5">
           <div className="mx-auto flex max-w-6xl justify-end">
-            <Link
-              to="/create"
-              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[var(--text)] px-6 py-2.5 text-[15px] font-medium text-white no-underline transition hover:bg-[#262626] sm:min-h-12 sm:px-8 sm:py-3 sm:text-[1.0625rem]"
+            <button
+              type="button"
+              className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-[var(--text)] px-6 py-2.5 text-[15px] font-medium text-white transition hover:bg-[#262626] sm:min-h-12 sm:px-8 sm:py-3 sm:text-[1.0625rem]"
+              onClick={() => setNewCanvasOpen(true)}
             >
               New file
-            </Link>
+            </button>
           </div>
         </header>
 
@@ -80,12 +83,13 @@ function FilesPage() {
                 <p className="m-0 text-lg leading-[1.6] text-[var(--text-muted)]">
                   Nothing here yet. Start a canvas — it autosaves as you work.
                 </p>
-                <Link
-                  to="/create"
-                  className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--text)] px-10 py-3.5 text-base font-medium text-white no-underline hover:bg-[#262626] sm:min-h-14 sm:px-12 sm:py-4 sm:text-[1.0625rem]"
+                <button
+                  type="button"
+                  className="mt-8 inline-flex min-h-12 cursor-pointer items-center justify-center rounded-full border-0 bg-[var(--text)] px-10 py-3.5 text-base font-medium text-white hover:bg-[#262626] sm:min-h-14 sm:px-12 sm:py-4 sm:text-[1.0625rem]"
+                  onClick={() => setNewCanvasOpen(true)}
                 >
                   Open editor
-                </Link>
+                </button>
               </div>
             ) : (
               <ul className="m-0 grid list-none grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 sm:gap-7">
@@ -127,6 +131,10 @@ function FilesPage() {
           </div>
         </div>
       </div>
+      <NewCanvasDialog
+        open={newCanvasOpen}
+        onClose={() => setNewCanvasOpen(false)}
+      />
     </main>
   )
 }
