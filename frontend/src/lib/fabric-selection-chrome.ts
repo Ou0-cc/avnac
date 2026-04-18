@@ -6,6 +6,102 @@ import type {
   Point,
 } from 'fabric'
 
+export type SceneHandleSizes = {
+  cornerSize: number
+  touchCornerSize: number
+  borderScaleFactor: number
+  sideW: number
+  sideH: number
+  mtrSize: number
+  mtrOffsetY: number
+}
+
+/**
+ * Target on-screen (CSS pixel) sizes for selection chrome.
+ * Scene-pixel sizes = target_css / (zoom/100) so they render at the same visible size
+ * regardless of artboard dimensions or zoom level.
+ */
+const TARGET_CORNER_CSS = 11
+const TARGET_SIDE_W_CSS = 26
+const TARGET_SIDE_H_CSS = 8
+const TARGET_MTR_CSS = 18
+const TARGET_MTR_OFFSET_Y_CSS = 26
+const TARGET_TOUCH_CORNER_CSS = 22
+
+export function getSceneHandleSizesForArtboard(
+  _minArtboardSide: number,
+  zoomPct: number | null | undefined,
+): SceneHandleSizes {
+  const z = Math.max(5, Math.min(400, zoomPct ?? 100)) / 100
+  const scene = (css: number) => Math.max(1, Math.round(css / z))
+
+  const cornerSize = scene(TARGET_CORNER_CSS)
+  const sideW = scene(TARGET_SIDE_W_CSS)
+  const sideH = scene(TARGET_SIDE_H_CSS)
+  const mtrSize = scene(TARGET_MTR_CSS)
+  const mtrOffsetY = scene(TARGET_MTR_OFFSET_Y_CSS)
+  const touchCornerSize = scene(TARGET_TOUCH_CORNER_CSS)
+  const borderScaleFactor = Math.max(1, Math.round(1.5 / z))
+
+  return {
+    cornerSize,
+    touchCornerSize,
+    borderScaleFactor,
+    sideW,
+    sideH,
+    mtrSize,
+    mtrOffsetY,
+  }
+}
+
+export function applySceneHandleSizesToInteractiveObject(
+  obj: InteractiveFabricObject,
+  sizes: SceneHandleSizes,
+) {
+  obj.set({
+    cornerSize: sizes.cornerSize,
+    touchCornerSize: sizes.touchCornerSize,
+    borderScaleFactor: sizes.borderScaleFactor,
+  })
+  const c = obj.controls
+  if (c.ml) {
+    c.ml.sizeX = sizes.sideW
+    c.ml.sizeY = sizes.sideH
+  }
+  if (c.mr) {
+    c.mr.sizeX = sizes.sideW
+    c.mr.sizeY = sizes.sideH
+  }
+  if (c.mtr) {
+    c.mtr.sizeX = sizes.mtrSize
+    c.mtr.sizeY = sizes.mtrSize
+    c.mtr.offsetY = sizes.mtrOffsetY
+  }
+}
+
+export function applySceneHandleSizesToCanvas(
+  canvas: Canvas,
+  fabricMod: typeof import('fabric'),
+  sizes: SceneHandleSizes,
+) {
+  const IO = fabricMod.InteractiveFabricObject
+  Object.assign(IO.ownDefaults, {
+    cornerSize: sizes.cornerSize,
+    touchCornerSize: sizes.touchCornerSize,
+    borderScaleFactor: sizes.borderScaleFactor,
+  })
+  for (const obj of canvas.getObjects()) {
+    if (obj instanceof IO) {
+      applySceneHandleSizesToInteractiveObject(obj, sizes)
+    }
+  }
+  const active = canvas.getActiveObject()
+  if (active instanceof IO) {
+    applySceneHandleSizesToInteractiveObject(active, sizes)
+  }
+  canvas.requestRenderAll()
+}
+
 const CANVAS_ACCENT_FALLBACK = '#ffb88e'
 
 function readCssAccent(): string {
