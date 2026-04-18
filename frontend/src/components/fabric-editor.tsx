@@ -173,6 +173,7 @@ import type {
 } from '../lib/avnac-ai-controller'
 import EditorShortcutsModal from './editor-shortcuts-modal'
 import EditorUploadsPanel from './editor-uploads-panel'
+import EditorAppsPanel from './editor-apps-panel'
 import EditorVectorBoardPanel from './editor-vector-board-panel'
 import VectorBoardWorkspace from './vector-board-workspace'
 
@@ -317,12 +318,18 @@ type FabricEditorProps = {
   onReadyChange?: (ready: boolean) => void
   /** When set, document is restored from and autosaved to IndexedDB under this id. */
   persistId?: string
+  /** Stored with each IndexedDB save (file name in the editor header). */
+  persistDisplayName?: string
 }
 
 const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
-  function FabricEditor({ onReadyChange, persistId }, ref) {
+  function FabricEditor({ onReadyChange, persistId, persistDisplayName }, ref) {
   const persistIdRef = useRef<string | undefined>(undefined)
   persistIdRef.current = persistId
+  const persistDisplayNameRef = useRef('')
+  persistDisplayNameRef.current = persistDisplayName?.trim()
+    ? persistDisplayName.trim()
+    : 'Untitled'
   const idbAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
@@ -2514,7 +2521,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     if (idbAutosaveTimerRef.current) clearTimeout(idbAutosaveTimerRef.current)
     idbAutosaveTimerRef.current = setTimeout(() => {
       idbAutosaveTimerRef.current = null
-      void idbPutDocument(pid, captureDocRef.current()).catch((err) => {
+      void idbPutDocument(pid, captureDocRef.current(), {
+        name: persistDisplayNameRef.current,
+      }).catch((err) => {
         console.error('FabricEditor: IndexedDB autosave failed', err)
       })
     }, 500)
@@ -2995,7 +3004,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         historyIndexRef.current = 0
         const pid = persistIdRef.current
         if (pid) {
-          void idbPutDocument(pid, next).catch((err) => {
+          void idbPutDocument(pid, next, {
+            name: persistDisplayNameRef.current,
+          }).catch((err) => {
             console.error('FabricEditor: IndexedDB save after open failed', err)
           })
         }
@@ -3935,6 +3946,11 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         onCreateNew={createVectorBoard}
         onOpenBoard={openVectorBoardWorkspace}
         onDeleteBoard={deleteVectorBoard}
+      />
+      <EditorAppsPanel
+        open={ready && editorSidebarPanel === 'apps'}
+        onClose={() => setEditorSidebarPanel(null)}
+        controller={aiController}
       />
       <EditorAiPanel
         open={ready && editorSidebarPanel === 'ai'}
