@@ -6,7 +6,18 @@ import type {
   Point,
 } from 'fabric'
 
-export const EDITOR_ACCENT_PURPLE = '#8B3DFF'
+const CANVAS_ACCENT_FALLBACK = '#ffb88e'
+
+function readCssAccent(): string {
+  if (typeof document === 'undefined') return CANVAS_ACCENT_FALLBACK
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue('--accent')
+    .trim()
+  return v || CANVAS_ACCENT_FALLBACK
+}
+
+// Single source of truth for canvas chrome accent; mirrors `--accent` in styles.css.
+export const EDITOR_CANVAS_ACCENT = readCssAccent()
 
 const HOVER_OUTLINE_PAD_CSS_PX = 6
 const HOVER_OUTLINE_LINE_CSS_PX = 2
@@ -62,7 +73,7 @@ function drawHoverOutline(
   }
 
   ctx.save()
-  ctx.strokeStyle = EDITOR_ACCENT_PURPLE
+  ctx.strokeStyle = EDITOR_CANVAS_ACCENT
   ctx.lineWidth = Math.max(1, HOVER_OUTLINE_LINE_CSS_PX * rs)
   ctx.setLineDash([])
   ctx.strokeRect(minX, minY, maxX - minX, maxY - minY)
@@ -231,7 +242,7 @@ function patchStrokeBordersScreenThickness(fab: typeof import('fabric')) {
 export function installFabricSelectionChrome(fabric: typeof import('fabric')) {
   if (!ownDefaultsApplied) {
     Object.assign(fabric.InteractiveFabricObject.ownDefaults, {
-      borderColor: EDITOR_ACCENT_PURPLE,
+      borderColor: EDITOR_CANVAS_ACCENT,
       cornerColor: '#ffffff',
       cornerStrokeColor: HANDLE_RING_STROKE,
       transparentCorners: false,
