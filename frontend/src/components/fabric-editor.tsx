@@ -3461,10 +3461,31 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         const canvas = fabricCanvasRef.current
         const mod = fabricModRef.current
         if (!canvas || !mod?.FabricImage) return null
+        const rawUrl = spec.url.trim()
+        const isDataUrl = /^data:image\//i.test(rawUrl)
+        const tryLoads: Array<() => Promise<FabricImage>> = isDataUrl
+          ? [() => mod.FabricImage.fromURL(rawUrl)]
+          : [
+              () =>
+                mod.FabricImage.fromURL(rawUrl, {
+                  crossOrigin: 'anonymous',
+                }),
+              () => mod.FabricImage.fromURL(rawUrl),
+            ]
+        let img: FabricImage | null = null
+        for (const load of tryLoads) {
+          try {
+            img = await load()
+            break
+          } catch {
+            /* try next strategy */
+          }
+        }
+        if (!img) {
+          console.error('AI addImageFromUrl failed for URL', rawUrl.slice(0, 80))
+          return null
+        }
         try {
-          const img = await mod.FabricImage.fromURL(spec.url, {
-            crossOrigin: 'anonymous',
-          })
           const natW = img.width ?? 1
           const natH = img.height ?? 1
           const targetW = spec.width ?? natW
