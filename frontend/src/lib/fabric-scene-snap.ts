@@ -11,6 +11,15 @@ type Options = {
   onGuidesChange?: (guides: SceneSnapGuide[]) => void
 }
 
+/** Prefer keeping the same guide briefly to avoid flip-flop at threshold edges. */
+const SNAP_HYSTERESIS_PX = 6
+
+const QUANT = 1000
+
+function q(n: number): number {
+  return Math.round(n * QUANT) / QUANT
+}
+
 function collectTargets(
   canvas: Canvas,
   moving: FabricObject,
@@ -28,6 +37,16 @@ function collectTargets(
   })
 }
 
+function guideSticky(
+  axis: 'v' | 'h',
+  line: number,
+  previous: SceneSnapGuide[],
+): boolean {
+  return previous.some(
+    (g) => g.axis === axis && Math.abs(g.pos - line) < 1.5,
+  )
+}
+
 function snapMovingObject(
   moving: FabricObject,
   canvas: Canvas,
@@ -35,18 +54,20 @@ function snapMovingObject(
   width: number,
   height: number,
   threshold: number,
-): SceneSnapGuide[] {
+  previousGuides: SceneSnapGuide[],
+): { guides: SceneSnapGuide[]; didSnap: boolean } {
   const guides: SceneSnapGuide[] = []
   const midX = width / 2
   const midY = height / 2
+
   const c = moving.getCenterPoint()
-  const br = moving.getBoundingRect()
-  const left = br.left
-  const right = br.left + br.width
-  const top = br.top
-  const bottom = br.top + br.height
-  const cx = left + br.width / 2
-  const cy = top + br.height / 2
+  let br = moving.getBoundingRect()
+  let left = q(br.left)
+  let right = q(br.left + br.width)
+  let top = q(br.top)
+  let bottom = q(br.top + br.height)
+  let cx = q(left + br.width / 2)
+  let cy = q(top + br.height / 2)
 
   const targets = collectTargets(canvas, moving, fabricMod)
 
@@ -55,10 +76,13 @@ function snapMovingObject(
   let guideX: number | undefined
 
   const tryX = (myX: number, theirX: number, gLine: number) => {
-    const d = theirX - myX
+    const d = q(theirX - myX)
     const ad = Math.abs(d)
-    if (ad <= threshold && ad < bestXScore) {
-      bestXScore = ad
+    if (ad > threshold) return
+    const sticky = guideSticky('v', gLine, previousGuides)
+    const score = ad - (sticky ? SNAP_HYSTERESIS_PX : 0)
+    if (score < bestXScore - 1e-9) {
+      bestXScore = score
       bestDx = d
       guideX = gLine
     }
@@ -66,9 +90,9 @@ function snapMovingObject(
 
   for (const o of targets) {
     const b = o.getBoundingRect()
-    const ox = b.left
-    const oc = b.left + b.width / 2
-    const or = b.left + b.width
+    const ox = q(b.left)
+    const oc = q(b.left + b.width / 2)
+    const or = q(b.left + b.width)
     for (const mx of [left, cx, right]) {
       for (const tx of [ox, oc, or]) {
         tryX(mx, tx, tx)
@@ -76,21 +100,49 @@ function snapMovingObject(
     }
   }
 
-  if (Math.abs(cx - midX) <= threshold && Math.abs(cx - midX) < bestXScore) {
-    bestDx = midX - cx
-    bestXScore = Math.abs(bestDx)
-    guideX = midX
+  const cxMidDist = Math.abs(cx - midX)
+  if (cxMidDist <= threshold) {
+    const sticky = guideSticky('v', midX, previousGuides)
+    const score = cxMidDist - (sticky ? SNAP_HYSTERESIS_PX : 0)
+    if (score < bestXScore - 1e-9) {
+      bestDx = q(midX - cx)
+      bestXScore = score
+      guideX = midX
+    }
   }
+
+  let didSnap = false
+
+  if (bestXScore <= threshold && guideX !== undefined) {
+    moving.setPositionByOrigin(
+      new Point(c.x + bestDx, c.y),
+      'center',
+      'center',
+    )
+    didSnap = true
+    guides.push({ axis: 'v', pos: q(guideX) })
+  }
+
+  br = moving.getBoundingRect()
+  left = q(br.left)
+  right = q(br.left + br.width)
+  top = q(br.top)
+  bottom = q(br.top + br.height)
+  cx = q(left + br.width / 2)
+  cy = q(top + br.height / 2)
 
   let bestDy = 0
   let bestYScore = threshold + 1
   let guideY: number | undefined
 
   const tryY = (myY: number, theirY: number, gLine: number) => {
-    const d = theirY - myY
+    const d = q(theirY - myY)
     const ad = Math.abs(d)
-    if (ad <= threshold && ad < bestYScore) {
-      bestYScore = ad
+    if (ad > threshold) return
+    const sticky = guideSticky('h', gLine, previousGuides)
+    const score = ad - (sticky ? SNAP_HYSTERESIS_PX : 0)
+    if (score < bestYScore - 1e-9) {
+      bestYScore = score
       bestDy = d
       guideY = gLine
     }
@@ -98,9 +150,9 @@ function snapMovingObject(
 
   for (const o of targets) {
     const b = o.getBoundingRect()
-    const oy = b.top
-    const oc = b.top + b.height / 2
-    const ob = b.top + b.height
+    const oy = q(b.top)
+    const oc = q(b.top + b.height / 2)
+    const ob = q(b.top + b.height)
     for (const my of [top, cy, bottom]) {
       for (const ty of [oy, oc, ob]) {
         tryY(my, ty, ty)
@@ -108,32 +160,38 @@ function snapMovingObject(
     }
   }
 
-  if (Math.abs(cy - midY) <= threshold && Math.abs(cy - midY) < bestYScore) {
-    bestDy = midY - cy
-    bestYScore = Math.abs(bestDy)
-    guideY = midY
+  const cyMidDist = Math.abs(cy - midY)
+  if (cyMidDist <= threshold) {
+    const sticky = guideSticky('h', midY, previousGuides)
+    const score = cyMidDist - (sticky ? SNAP_HYSTERESIS_PX : 0)
+    if (score < bestYScore - 1e-9) {
+      bestDy = q(midY - cy)
+      bestYScore = score
+      guideY = midY
+    }
   }
 
-  if (bestXScore <= threshold) {
-    moving.setPositionByOrigin(
-      new Point(c.x + bestDx, c.y),
-      'center',
-      'center',
-    )
-    if (guideX !== undefined) guides.push({ axis: 'v', pos: guideX })
-  }
-
-  if (bestYScore <= threshold) {
+  if (bestYScore <= threshold && guideY !== undefined) {
     const c2 = moving.getCenterPoint()
     moving.setPositionByOrigin(
       new Point(c2.x, c2.y + bestDy),
       'center',
       'center',
     )
-    if (guideY !== undefined) guides.push({ axis: 'h', pos: guideY })
+    didSnap = true
+    guides.push({ axis: 'h', pos: q(guideY) })
   }
 
-  return guides
+  return { guides, didSnap }
+}
+
+function guidesEqual(a: SceneSnapGuide[], b: SceneSnapGuide[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every(
+    (x, i) =>
+      x.axis === b[i]?.axis &&
+      Math.abs(x.pos - (b[i]?.pos ?? NaN)) < 0.51,
+  )
 }
 
 export function installSceneSnap(
@@ -144,33 +202,34 @@ export function installSceneSnap(
     thOpt ?? Math.max(20, Math.round(Math.min(width, height) * 0.006))
 
   let lastGuides: SceneSnapGuide[] = []
+  let previousSnapGuides: SceneSnapGuide[] = []
 
-  const setGuides = (g: SceneSnapGuide[]) => {
-    const same =
-      g.length === lastGuides.length &&
-      g.every(
-        (x, i) =>
-          x.axis === lastGuides[i]?.axis && x.pos === lastGuides[i]?.pos,
-      )
-    if (same) return
+  const setGuides = (g: SceneSnapGuide[]): boolean => {
+    if (guidesEqual(g, lastGuides)) return false
     lastGuides = g
     onGuidesChange?.(g)
+    return true
   }
 
   const onMoving = (opt: { target: FabricObject }) => {
-    const g = snapMovingObject(
+    const { guides, didSnap } = snapMovingObject(
       opt.target,
       canvas,
       fabricMod,
       width,
       height,
       threshold,
+      previousSnapGuides,
     )
-    setGuides(g)
-    canvas.requestRenderAll()
+    previousSnapGuides = guides
+    const guidesChanged = setGuides(guides)
+    if (didSnap || guidesChanged) {
+      canvas.requestRenderAll()
+    }
   }
 
   const clearGuides = () => {
+    previousSnapGuides = []
     setGuides([])
     canvas.requestRenderAll()
   }
@@ -183,6 +242,7 @@ export function installSceneSnap(
     canvas.off('object:moving', onMoving)
     canvas.off('object:modified', clearGuides)
     canvas.off('selection:cleared', clearGuides)
+    previousSnapGuides = []
     if (lastGuides.length) {
       lastGuides = []
       onGuidesChange?.([])
