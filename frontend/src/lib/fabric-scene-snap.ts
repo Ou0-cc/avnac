@@ -241,7 +241,9 @@ export function installSceneSnap(
   const beforeRender = () => {
     // Ensure the overlay starts clean each render so stale guides never linger
     // when fabric does not otherwise re-paint the upper canvas (e.g. on release).
-    canvas.clearContext(canvas.contextTop)
+    const topCtx = canvas.contextTop
+    if (!topCtx) return
+    canvas.clearContext(topCtx)
   }
 
   const afterRender = () => {
