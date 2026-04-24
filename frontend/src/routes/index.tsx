@@ -1,9 +1,10 @@
 import { AiMagicIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePostHog } from "posthog-js/react";
 import NewCanvasDialog from "../components/new-canvas-dialog";
+import { idbListDocuments } from "../lib/avnac-editor-idb";
 
 export const Route = createFileRoute("/")({ component: Landing });
 
@@ -162,12 +163,28 @@ function radiansToDegrees(value: number) {
 }
 
 function Landing() {
+  const navigate = Route.useNavigate();
   const [newCanvasOpen, setNewCanvasOpen] = useState(false);
+  const [savedFileCount, setSavedFileCount] = useState<number | null>(null);
   const [stickers, setStickers] = useState(initialStickers);
   const [activeStickerId, setActiveStickerId] = useState<string | null>(null);
   const posthog = usePostHog();
   const stickerLayerRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void idbListDocuments()
+      .then((docs) => {
+        if (!cancelled) setSavedFileCount(docs.length);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedFileCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateStickerPosition = (
     stickerId: string,
@@ -235,10 +252,37 @@ function Landing() {
     setActiveStickerId(null);
   };
 
-  const openEditor = () => {
-    posthog.capture("editor_opened", { source: "landing_hero" });
-    setNewCanvasOpen(true);
-  };
+  const openEditor = useCallback(() => {
+    void (async () => {
+      try {
+        const docs = await idbListDocuments();
+        setSavedFileCount(docs.length);
+        const destination = docs.length > 0 ? "/files" : "/create";
+        posthog.capture("editor_opened", {
+          source: "landing_hero",
+          destination,
+          existing_file_count: docs.length,
+        });
+        if (docs.length > 0) {
+          await navigate({ to: "/files" });
+          return;
+        }
+      } catch (err) {
+        posthog.captureException(err);
+      }
+      setNewCanvasOpen(true);
+    })();
+  }, [navigate, posthog]);
+
+  const hasSavedFiles = (savedFileCount ?? 0) > 0;
+  const primaryCtaLabel = hasSavedFiles ? "Open files" : "Open editor";
+  const heroBody = hasSavedFiles
+    ? "You already have saved work in this browser. Open your files and keep editing."
+    : "Avnac is an open canvas for layouts, posters, and graphics.";
+  const ctaKicker = hasSavedFiles ? "Back to work" : "Ready to make something";
+  const ctaTitle = hasSavedFiles
+    ? "Open your files and keep going."
+    : "Open a canvas and make something.";
 
   return (
     <main className="landing-page">
@@ -366,7 +410,7 @@ function Landing() {
               openly.
             </h1>
             <p className="mb-10 max-w-xl text-lg leading-[1.6] text-[var(--text-muted)] sm:mb-12 sm:text-xl sm:leading-[1.55] lg:text-[1.375rem] lg:leading-[1.5]">
-              Avnac is an open canvas for layouts, posters, and graphics.
+              {heroBody}
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <button
@@ -374,7 +418,7 @@ function Landing() {
                 className="bg-black text-white inline-flex min-h-12 cursor-pointer items-center justify-center rounded-full border-0 px-10 py-3.5 text-base font-medium sm:min-h-14 sm:px-12 sm:py-4 sm:text-[1.0625rem]"
                 onClick={openEditor}
               >
-                Open editor
+                {primaryCtaLabel}
               </button>
               <a
                 href="https://github.com/akinloluwami/avnac"
@@ -528,9 +572,9 @@ function Landing() {
         <div className="landing-container">
           <div className="landing-cta-band landing-cta-band-only">
             <div>
-              <div className="landing-kicker">Ready to make something</div>
+              <div className="landing-kicker">{ctaKicker}</div>
               <h2 className="display-title landing-cta-title">
-                Open a canvas and make something.
+                {ctaTitle}
               </h2>
             </div>
             <div className="landing-cta-actions">
@@ -539,7 +583,7 @@ function Landing() {
                 className="bg-black text-white min-h-12 cursor-pointer items-center justify-center rounded-full border-0 px-10 py-3.5 text-base font-medium sm:min-h-14 sm:px-12 sm:py-4 sm:text-[1.0625rem]"
                 onClick={openEditor}
               >
-                Open editor
+                {primaryCtaLabel}
               </button>
               <a
                 href="https://github.com/akinloluwami/avnac"
