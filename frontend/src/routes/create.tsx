@@ -7,6 +7,7 @@ import EditorExportMenu from "../components/editor-export-menu";
 import FabricEditor, {
   type FabricEditorHandle,
 } from "../components/fabric-editor";
+import { useEditorUnsupportedOnThisDevice } from "../hooks/use-editor-device-support";
 import {
   idbGetEditorRecord,
   idbSetDocumentName,
@@ -47,8 +48,10 @@ function CreatePage() {
   const initialH = search.h;
   const navigate = Route.useNavigate();
   const posthog = usePostHog();
+  const editorUnsupported = useEditorUnsupportedOnThisDevice();
 
   useLayoutEffect(() => {
+    if (editorUnsupported) return;
     if (id) return;
     void navigate({
       to: "/create",
@@ -59,7 +62,7 @@ function CreatePage() {
       },
       replace: true,
     });
-  }, [id, initialW, initialH, navigate]);
+  }, [editorUnsupported, id, initialW, initialH, navigate]);
 
   useEffect(() => {
     if (!id) return;
@@ -81,6 +84,43 @@ function CreatePage() {
       posthog.capture("document_renamed", { file_id: id, new_name: t });
     }
   };
+
+  if (editorUnsupported) {
+    return (
+      <main className="hero-page relative flex min-h-[100dvh] flex-col overflow-hidden px-5 py-12 sm:px-8 sm:py-16">
+        <div className="hero-bg-orb hero-bg-orb-a" aria-hidden="true" />
+        <div className="hero-bg-orb hero-bg-orb-b" aria-hidden="true" />
+        <div className="hero-grid" aria-hidden="true" />
+
+        <div className="relative z-[1] mx-auto flex w-full max-w-2xl flex-1 items-center justify-center">
+          <div className="w-full rounded-[2rem] border border-[var(--line)] bg-white/82 p-7 text-center shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-md sm:p-10">
+            <div className="landing-kicker mb-3">Desktop Only</div>
+            <h1 className="display-title text-[clamp(2rem,8vw,3rem)] font-medium leading-[1.04] tracking-[-0.03em] text-[var(--text)]">
+              The editor is not available on mobile.
+            </h1>
+            <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-[var(--text-muted)] sm:text-lg">
+              Open Avnac on a desktop or laptop to create and edit files. You can
+              still return to your files from here.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to="/files"
+                className="inline-flex min-h-12 items-center justify-center rounded-full border-0 bg-[var(--text)] px-8 py-3 text-base font-medium text-white no-underline hover:bg-[#262626]"
+              >
+                Go to files
+              </Link>
+              <Link
+                to="/"
+                className="inline-flex min-h-12 items-center justify-center rounded-full border border-black/[0.14] bg-white/70 px-8 py-3 text-base font-medium text-[var(--text)] no-underline hover:border-black/[0.22] hover:bg-white"
+              >
+                Back home
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (!id) {
     return null;
