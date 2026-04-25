@@ -1,5 +1,3 @@
-53vi4Yd84MuYRbPo3DqnouaTVP9upbHUGaVQGZvtpump
-
 # Avnac
 
 Avnac is an open browser-based canvas for layouts, posters, and graphics.
