@@ -1,17 +1,3 @@
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  ArrowDown01Icon,
-  Copy01Icon,
-  CropIcon,
-  Delete02Icon,
-  FilePasteIcon,
-  HelpCircleIcon,
-  Image01Icon,
-  Layers02Icon,
-  SquareLock01Icon,
-  SquareUnlock01Icon,
-  TextFontIcon,
-} from '@hugeicons/core-free-icons'
 import {
   forwardRef,
   useCallback,
@@ -86,62 +72,35 @@ import { loadImageMetadata } from '../lib/avnac-image-proxy'
 import { extractImageUrlFromDataTransfer } from '../lib/extract-image-url-from-data-transfer'
 import { loadGoogleFontFamily } from '../lib/load-google-font'
 import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
-import ShapeOptionsToolbar from './shape-options-toolbar'
 import TransparencyToolbarPopover from './transparency-toolbar-popover'
-import ShapesPopover, {
-  iconForShapesQuickAdd,
-  type PopoverShapeKind,
-  type ShapesQuickAddKind,
-} from './shapes-popover'
-import TextFormatToolbar, {
-  type TextFormatToolbarValues,
-} from './text-format-toolbar'
-import BackgroundPopover, {
-  bgValueToSwatch,
-  type BgValue,
-} from './background-popover'
-import ArtboardResizeToolbarControl from './artboard-resize-toolbar-control'
+import type { PopoverShapeKind, ShapesQuickAddKind } from './shapes-popover'
+import type { TextFormatToolbarValues } from './text-format-toolbar'
+import type { BgValue } from './background-popover'
 import BlurToolbarControl from './blur-toolbar-control'
 import ShadowToolbarPopover from './shadow-toolbar-popover'
 import StrokeToolbarPopover from './stroke-toolbar-popover'
-import CornerRadiusToolbarControl from './corner-radius-toolbar-control'
-import CanvasZoomSlider from './canvas-zoom-slider'
-import CanvasElementToolbar, {
-  type CanvasAlignKind,
-} from './canvas-element-toolbar'
-import {
-  FloatingToolbarDivider,
-  FloatingToolbarShell,
-  floatingToolbarIconButton,
-} from './floating-toolbar-shell'
+import type { CanvasAlignKind } from './canvas-element-toolbar'
+import { FloatingToolbarDivider } from './floating-toolbar-shell'
 import ImageCropModal, {
   type ImageCropModalApplyPayload,
 } from './image-crop-modal'
 import type { ExportPngOptions } from './editor-export-menu'
-import EditorFloatingSidebar, {
-  type EditorSidebarPanelId,
-} from './editor-floating-sidebar'
-import EditorLayersPanel, {
-  type EditorLayerRow,
-} from './editor-layers-panel'
-import EditorAiPanel from './editor-ai-panel'
+import type { EditorSidebarPanelId } from './editor-floating-sidebar'
+import type { EditorLayerRow } from './editor-layers-panel'
 import type {
   AiDesignController,
   AiObjectKind,
   AiObjectSummary,
 } from '../lib/avnac-ai-controller'
 import EditorShortcutsModal from './editor-shortcuts-modal'
-import EditorUploadsPanel from './editor-uploads-panel'
-import EditorAppsPanel from './editor-apps-panel'
-import EditorImagesPanel from './editor-images-panel'
-import EditorVectorBoardPanel from './editor-vector-board-panel'
-import VectorBoardWorkspace from './vector-board-workspace'
-import { SceneObjectView } from './scene-editor/object-view'
+import { CanvasStage } from './scene-editor/canvas-stage'
+import { EditorBottomTools } from './scene-editor/editor-bottom-tools'
 import {
-  SelectionBoundsOverlay,
-  SelectionOverlay,
-  SnapGuidesOverlay,
-} from './scene-editor/selection-overlays'
+  EditorContextMenu,
+  type EditorContextMenuState,
+} from './scene-editor/editor-context-menu'
+import { EditorSidePanels } from './scene-editor/editor-side-panels'
+import { EditorSelectionToolbar } from './scene-editor/editor-selection-toolbar'
 import { useEditorKeyboardShortcuts } from './scene-editor/use-editor-keyboard-shortcuts'
 import {
   SNAP_DEADBAND_PX,
@@ -197,29 +156,6 @@ type SceneEditorProps = {
   persistDisplayName?: string
   initialArtboardWidth?: number
   initialArtboardHeight?: number
-}
-
-type EditorContextMenuState = {
-  x: number
-  y: number
-  sceneX: number
-  sceneY: number
-  hasSelection: boolean
-  locked: boolean
-}
-
-function toolbarIconBtn(disabled?: boolean) {
-  const base =
-    'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-neutral-600 outline-none transition-colors hover:bg-black/[0.06]'
-  if (disabled) return `${base} pointer-events-none cursor-not-allowed opacity-35`
-  return base
-}
-
-function backgroundTopBtn(disabled?: boolean) {
-  const base =
-    'flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-neutral-700 outline-none transition-colors hover:bg-black/[0.06]'
-  if (disabled) return `${base} pointer-events-none cursor-not-allowed opacity-35`
-  return base
 }
 
 function artboardAlignAlreadySatisfied(
@@ -2245,9 +2181,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       </>
     ) : null
 
-    const contextMenuButtonClass =
-      'flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-neutral-800 outline-none hover:bg-black/[0.05] focus:bg-black/[0.05]'
-
     return (
       <div className="relative flex min-h-0 flex-1 flex-col">
         <input
@@ -2262,112 +2195,40 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           }}
         />
 
-        <div
-          ref={selectionToolsRef}
-          className="pointer-events-auto relative z-30 flex h-14 w-full shrink-0 items-center justify-center px-1 sm:px-2"
-        >
-          {ready && textToolbarValues ? (
-            <TextFormatToolbar
-              values={textToolbarValues}
-              onChange={onTextFormatChange}
-              footerSlot={selectionEffectsFooterSlot}
-            />
-          ) : null}
-          {ready && !textToolbarValues && shapeToolbarModel ? (
-            <ShapeOptionsToolbar
-              meta={shapeToolbarModel.meta}
-              paintValue={shapeToolbarModel.paint}
-              onPaintChange={applyPaintToSelection}
-              onPolygonSides={applyPolygonSides}
-              onStarPoints={applyStarPoints}
-              onArrowLineStyle={applyArrowLineStyle}
-              onArrowRoundedEnds={applyArrowRoundedEnds}
-              onArrowStrokeWidth={applyArrowStrokeWidth}
-              onArrowPathType={applyArrowPathType}
-              rectCornerRadius={shapeToolbarModel.rectCornerRadius}
-              rectCornerRadiusMax={shapeToolbarModel.rectCornerRadiusMax}
-              onRectCornerRadius={
-                shapeToolbarModel.meta.kind === 'rect'
-                  ? applyRectCornerRadius
-                  : undefined
-              }
-              footerSlot={selectionEffectsFooterSlot}
-            />
-          ) : null}
-          {ready && hasObjectSelected && !textToolbarValues && !shapeToolbarModel ? (
-            <FloatingToolbarShell role="toolbar" aria-label="Selection">
-              <div className="flex items-center py-1 pl-2 pr-2">
-                {imageCornerToolbar ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={elementToolbarLockedDisplay}
-                      className={[
-                        floatingToolbarIconButton(false),
-                        elementToolbarLockedDisplay
-                          ? 'pointer-events-none opacity-40'
-                          : '',
-                      ].join(' ')}
-                      onClick={openImageCropModal}
-                      aria-label="Crop image"
-                      title="Crop image"
-                    >
-                      <HugeiconsIcon icon={CropIcon} size={20} strokeWidth={1.75} />
-                    </button>
-                    <CornerRadiusToolbarControl
-                      value={imageCornerToolbar.radius}
-                      max={imageCornerToolbar.max}
-                      onChange={applyImageCornerRadius}
-                      disabled={elementToolbarLockedDisplay}
-                    />
-                    <FloatingToolbarDivider />
-                  </>
-                ) : null}
-                {selectionEffectsFooterSlot}
-              </div>
-            </FloatingToolbarShell>
-          ) : null}
-          {ready && !textToolbarValues && !shapeToolbarModel && canvasBodySelected ? (
-            <div ref={backgroundPopoverAnchorRef} className="relative">
-              <div className="flex items-center rounded-full border border-black/[0.08] bg-white/90 px-2 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md">
-                <ArtboardResizeToolbarControl
-                  width={artboardW}
-                  height={artboardH}
-                  onResize={onArtboardResize}
-                  viewportRef={viewportRef}
-                />
-                <FloatingToolbarDivider />
-                <button
-                  type="button"
-                  className={backgroundTopBtn(false)}
-                  onClick={() => setBgPopoverOpen((open) => !open)}
-                  aria-label="Page background"
-                  aria-expanded={bgPopoverOpen}
-                >
-                  <span
-                    className="size-4 rounded-full border border-black/10"
-                    style={bgValueToSwatch(doc.bg)}
-                  />
-                  Background
-                </button>
-              </div>
-              {bgPopoverOpen ? (
-                <div
-                  ref={backgroundPopoverPanelRef}
-                  className={[
-                    'absolute left-1/2 z-[60]',
-                    backgroundPopoverOpenUpward ? 'bottom-full mb-2' : 'top-full mt-2',
-                  ].join(' ')}
-                  style={{
-                    transform: `translateX(calc(-50% + ${backgroundPopoverShiftX}px))`,
-                  }}
-                >
-                  <BackgroundPopover value={doc.bg} onChange={applyBackgroundPicked} />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        <EditorSelectionToolbar
+          applyArrowLineStyle={applyArrowLineStyle}
+          applyArrowPathType={applyArrowPathType}
+          applyArrowRoundedEnds={applyArrowRoundedEnds}
+          applyArrowStrokeWidth={applyArrowStrokeWidth}
+          applyBackgroundPicked={applyBackgroundPicked}
+          applyImageCornerRadius={applyImageCornerRadius}
+          applyPaintToSelection={applyPaintToSelection}
+          applyPolygonSides={applyPolygonSides}
+          applyRectCornerRadius={applyRectCornerRadius}
+          applyStarPoints={applyStarPoints}
+          artboardH={artboardH}
+          artboardW={artboardW}
+          backgroundPopoverAnchorRef={backgroundPopoverAnchorRef}
+          backgroundPopoverOpenUpward={backgroundPopoverOpenUpward}
+          backgroundPopoverPanelRef={backgroundPopoverPanelRef}
+          backgroundPopoverShiftX={backgroundPopoverShiftX}
+          bg={doc.bg}
+          bgPopoverOpen={bgPopoverOpen}
+          canvasBodySelected={canvasBodySelected}
+          elementToolbarLockedDisplay={elementToolbarLockedDisplay}
+          hasObjectSelected={hasObjectSelected}
+          imageCornerToolbar={imageCornerToolbar}
+          onArtboardResize={onArtboardResize}
+          onTextFormatChange={onTextFormatChange}
+          openImageCropModal={openImageCropModal}
+          ready={ready}
+          selectionEffectsFooterSlot={selectionEffectsFooterSlot}
+          selectionToolsRef={selectionToolsRef}
+          setBgPopoverOpen={setBgPopoverOpen}
+          shapeToolbarModel={shapeToolbarModel}
+          textToolbarValues={textToolbarValues}
+          viewportRef={viewportRef}
+        />
 
         {exportError ? (
           <div className="pointer-events-none absolute inset-x-0 top-3 z-40 flex justify-center px-3">
@@ -2384,326 +2245,97 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           onDragOver={ready ? onViewportDragOver : undefined}
           onDrop={ready ? onViewportDrop : undefined}
         >
-          <div className="flex min-h-min w-full flex-1 flex-col items-center justify-center px-4 pb-4 pt-0 sm:px-6 sm:pb-6 sm:pt-1">
-            <div className="relative z-0 -mt-4 inline-block sm:-mt-5">
-              {ready && hasObjectSelected && elementToolbarLayout && !editingSelectedText ? (
-                <CanvasElementToolbar
-                  ref={elementToolbarRef}
-                  style={{
-                    left: elementToolbarLayout.left,
-                    top: elementToolbarLayout.top,
-                  }}
-                  placement={elementToolbarLayout.placement}
-                  viewportRef={viewportRef}
-                  locked={elementToolbarLockedDisplay}
-                  onDuplicate={() => void duplicateElement()}
-                  onToggleLock={toggleElementLock}
-                  onDelete={deleteSelection}
-                  onCopy={() => void copyElementToClipboard()}
-                  onPaste={() => void pasteFromClipboard()}
-                  onAlign={alignElementToArtboard}
-                  alignAlreadySatisfied={
-                    elementToolbarAlignAlready ?? {
-                      left: false,
-                      centerH: false,
-                      right: false,
-                      top: false,
-                      centerV: false,
-                      bottom: false,
-                    }
-                  }
-                  canGroup={elementToolbarCanGroup}
-                  canAlignElements={elementToolbarCanAlignElements}
-                  canUngroup={!!elementToolbarCanUngroup}
-                  onGroup={groupSelection}
-                  onAlignElements={alignSelectedElements}
-                  onUngroup={ungroupSelection}
-                />
-              ) : null}
-
-              <div
-                ref={artboardOuterRef}
-                className="relative rounded-sm"
-                style={{
-                  width: artboardW * scale,
-                  height: artboardH * scale,
-                  lineHeight: 0,
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-                }}
-              >
-                <div
-                  ref={artboardInnerRef}
-                  className="absolute left-0 top-0 select-none overflow-visible rounded-sm bg-white"
-                  style={{
-                    width: artboardW,
-                    height: artboardH,
-                    transform: `scale(${scale})`,
-                    transformOrigin: 'top left',
-                    background:
-                      doc.bg.type === 'solid' ? doc.bg.color : doc.bg.css,
-                  }}
-                  onPointerEnter={onArtboardPointerEnter}
-                  onPointerMove={onArtboardPointerMove}
-                  onPointerDown={onViewportPointerDown}
-                  onPointerLeave={onArtboardPointerLeave}
-                >
-                  <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
-                    {doc.objects
-                      .filter((obj) => obj.visible)
-                      .map((obj) => (
-                      <SceneObjectView
-                        key={obj.id}
-                        obj={obj}
-                        vectorBoardDocs={vectorBoardDocs}
-                        textEditingId={textEditingId}
-                        textDraft={textDraft}
-                        onObjectPointerDown={onObjectPointerDown}
-                        onObjectHoverChange={(id, hovering) => {
-                          setHoveredId((current) => {
-                            if (hovering) return id
-                            return current === id ? null : current
-                          })
-                        }}
-                        onTextDoubleClick={(textObj) => {
-                          if (textObj.locked) return
-                          setSelectedIds([textObj.id])
-                          setTextEditingId(textObj.id)
-                          setTextDraft(textObj.text)
-                        }}
-                        onTextDraftChange={setTextDraft}
-                        onTextDraftCommit={commitTextDraft}
-                      />
-                      ))}
-                  </div>
-                  <SnapGuidesOverlay
-                    guides={snapGuides}
-                    scale={scale}
-                    artboardW={artboardW}
-                    artboardH={artboardH}
-                  />
-                  {hoveredObject &&
-                  selectedIds.length === 0 &&
-                  textEditingId == null ? (
-                    <SelectionBoundsOverlay
-                      bounds={getObjectRotatedBounds(hoveredObject)}
-                      scale={scale}
-                    />
-                  ) : null}
-                  {!hoveredObject &&
-                  selectedIds.length === 0 &&
-                  textEditingId == null &&
-                  (backgroundActive || backgroundHovered) ? (
-                    <SelectionBoundsOverlay
-                      bounds={{ left: 0, top: 0, width: artboardW, height: artboardH }}
-                      scale={scale}
-                    />
-                  ) : null}
-                  {selectedObjects.length > 1 && selectionBounds ? (
-                    <SelectionBoundsOverlay bounds={selectionBounds} scale={scale} />
-                  ) : null}
-                  {marqueeRect && (marqueeRect.width > 0 || marqueeRect.height > 0) ? (
-                    <SelectionBoundsOverlay
-                      bounds={marqueeRect}
-                      scale={scale}
-                      dashed
-                      fill
-                    />
-                  ) : null}
-                  {selectedSingle && !selectedSingle.locked && !editingSelectedText ? (
-                    <SelectionOverlay
-                      object={selectedSingle}
-                      scale={scale}
-                      onHandlePointerDown={onSelectionHandlePointerDown}
-                      onRotatePointerDown={onRotateHandlePointerDown}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {contextMenu ? (
-          <div
-            role="menu"
-            className="fixed z-[90] min-w-48 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-[0_18px_48px_rgba(0,0,0,0.16)] backdrop-blur"
-            style={{
-              left: `min(${contextMenu.x}px, calc(100vw - 12.5rem))`,
-              top: `min(${contextMenu.y}px, calc(100vh - 18rem))`,
+          <CanvasStage
+            alignElementToArtboard={alignElementToArtboard}
+            alignSelectedElements={alignSelectedElements}
+            artboardH={artboardH}
+            artboardInnerRef={artboardInnerRef}
+            artboardOuterRef={artboardOuterRef}
+            artboardW={artboardW}
+            backgroundActive={backgroundActive}
+            backgroundHovered={backgroundHovered}
+            bg={doc.bg}
+            commitTextDraft={commitTextDraft}
+            copyElementToClipboard={() => void copyElementToClipboard()}
+            deleteSelection={deleteSelection}
+            duplicateElement={() => void duplicateElement()}
+            editingSelectedText={editingSelectedText}
+            elementToolbarAlignAlready={elementToolbarAlignAlready}
+            elementToolbarCanAlignElements={elementToolbarCanAlignElements}
+            elementToolbarCanGroup={elementToolbarCanGroup}
+            elementToolbarCanUngroup={!!elementToolbarCanUngroup}
+            elementToolbarLayout={elementToolbarLayout}
+            elementToolbarLockedDisplay={elementToolbarLockedDisplay}
+            elementToolbarRef={elementToolbarRef}
+            groupSelection={groupSelection}
+            hasObjectSelected={hasObjectSelected}
+            hoveredObject={hoveredObject}
+            marqueeRect={marqueeRect}
+            objects={doc.objects}
+            onArtboardPointerEnter={onArtboardPointerEnter}
+            onArtboardPointerLeave={onArtboardPointerLeave}
+            onArtboardPointerMove={onArtboardPointerMove}
+            onObjectHoverChange={(id, hovering) => {
+              setHoveredId((current) => {
+                if (hovering) return id
+                return current === id ? null : current
+              })
             }}
-            data-avnac-chrome
-          >
-            {contextMenu.hasSelection ? (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={contextMenuButtonClass}
-                  onClick={() => {
-                    void copyElementToClipboard()
-                    closeContextMenu()
-                  }}
-                >
-                  <HugeiconsIcon icon={Copy01Icon} size={18} strokeWidth={1.75} />
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={contextMenuButtonClass}
-                  onClick={() => {
-                    void duplicateElement()
-                    closeContextMenu()
-                  }}
-                >
-                  <HugeiconsIcon icon={Layers02Icon} size={18} strokeWidth={1.75} />
-                  Duplicate
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={contextMenuButtonClass}
-                  onClick={() => {
-                    toggleElementLock()
-                    closeContextMenu()
-                  }}
-                >
-                  <HugeiconsIcon
-                    icon={contextMenu.locked ? SquareUnlock01Icon : SquareLock01Icon}
-                    size={18}
-                    strokeWidth={1.75}
-                  />
-                  {contextMenu.locked ? 'Unlock' : 'Lock'}
-                </button>
-                <div className="my-1 h-px bg-black/[0.06]" aria-hidden />
-              </>
-            ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              className={contextMenuButtonClass}
-              onClick={() => {
-                void pasteFromClipboard({ x: contextMenu.sceneX, y: contextMenu.sceneY })
-                closeContextMenu()
-              }}
-            >
-              <HugeiconsIcon icon={FilePasteIcon} size={18} strokeWidth={1.75} />
-              Paste
-            </button>
-            {contextMenu.hasSelection ? (
-              <>
-                <div className="my-1 h-px bg-black/[0.06]" aria-hidden />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={contextMenuButtonClass}
-                  onClick={() => {
-                    deleteSelection()
-                    closeContextMenu()
-                  }}
-                >
-                  <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
-                  Delete
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="pointer-events-auto absolute bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] right-3 z-30 sm:right-4">
-          {ready && zoomPercent !== null ? (
-            <CanvasZoomSlider
-              value={zoomPercent}
-              min={ZOOM_MIN_PCT}
-              max={ZOOM_MAX_PCT}
-              onChange={onZoomSliderChange}
-              onFitRequest={onZoomFitRequest}
-            />
-          ) : null}
+            onObjectPointerDown={onObjectPointerDown}
+            onRotateHandlePointerDown={onRotateHandlePointerDown}
+            onSelectionHandlePointerDown={onSelectionHandlePointerDown}
+            onTextDoubleClick={(textObj) => {
+              if (textObj.locked) return
+              setSelectedIds([textObj.id])
+              setTextEditingId(textObj.id)
+              setTextDraft(textObj.text)
+            }}
+            onTextDraftChange={setTextDraft}
+            onViewportPointerDown={onViewportPointerDown}
+            pasteFromClipboard={() => void pasteFromClipboard()}
+            ready={ready}
+            scale={scale}
+            selectedIds={selectedIds}
+            selectedObjects={selectedObjects}
+            selectedSingle={selectedSingle}
+            selectionBounds={selectionBounds}
+            snapGuides={snapGuides}
+            textDraft={textDraft}
+            textEditingId={textEditingId}
+            toggleElementLock={toggleElementLock}
+            ungroupSelection={ungroupSelection}
+            vectorBoardDocs={vectorBoardDocs}
+            viewportRef={viewportRef}
+          />
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-2 pt-24">
-          <div
-            className="pointer-events-auto flex items-center gap-1 rounded-full border border-black/[0.08] bg-white/85 px-2 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.8)_inset] backdrop-blur-xl"
-            role="toolbar"
-            aria-label="Editor tools"
-          >
-            <div
-              ref={shapeToolSplitRef}
-              className="relative flex items-stretch rounded-lg border border-black/[0.06] bg-black/[0.02]"
-            >
-              <button
-                type="button"
-                disabled={!ready}
-                className={`${toolbarIconBtn(!ready)} rounded-l-lg rounded-r-none border-0`}
-                onClick={() => addShapeFromKind(shapesQuickAddKind === 'generic' ? 'rect' : shapesQuickAddKind)}
-                aria-label="Add shape"
-                title="Add shape"
-              >
-                <HugeiconsIcon
-                  icon={iconForShapesQuickAdd(shapesQuickAddKind)}
-                  size={20}
-                  strokeWidth={1.75}
-                />
-              </button>
-              <button
-                type="button"
-                disabled={!ready}
-                className={`${toolbarIconBtn(!ready)} rounded-l-none rounded-r-lg border-0 border-l border-black/[0.06]`}
-                onClick={() => setShapesPopoverOpen((open) => !open)}
-                aria-expanded={shapesPopoverOpen}
-                aria-haspopup="menu"
-                aria-label="More shapes"
-              >
-                <HugeiconsIcon icon={ArrowDown01Icon} size={16} strokeWidth={1.75} />
-              </button>
-              <ShapesPopover
-                open={shapesPopoverOpen}
-                disabled={!ready}
-                anchorRef={shapeToolSplitRef}
-                onClose={() => setShapesPopoverOpen(false)}
-                onPick={(kind) => {
-                  setShapesQuickAddKind(kind)
-                  addShapeFromKind(kind)
-                  setShapesPopoverOpen(false)
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              disabled={!ready}
-              className={toolbarIconBtn(!ready)}
-              onClick={addText}
-              aria-label="Add text"
-              title="Add text"
-            >
-              <HugeiconsIcon icon={TextFontIcon} size={20} strokeWidth={1.75} />
-            </button>
-            <button
-              type="button"
-              disabled={!ready}
-              className={toolbarIconBtn(!ready)}
-              onClick={() => imageInputRef.current?.click()}
-              aria-label="Add image"
-              title="Add image"
-            >
-              <HugeiconsIcon icon={Image01Icon} size={20} strokeWidth={1.75} />
-            </button>
-            <button
-              type="button"
-              disabled={!ready}
-              className={toolbarIconBtn(!ready)}
-              onClick={() => setShortcutsOpen(true)}
-              aria-label="Keyboard shortcuts"
-              title="Shortcuts (?)"
-            >
-              <HugeiconsIcon icon={HelpCircleIcon} size={20} strokeWidth={1.75} />
-            </button>
-            {!ready ? (
-              <span className="px-3 text-xs text-[var(--text-muted)]">Loading…</span>
-            ) : null}
-          </div>
-        </div>
+        <EditorContextMenu
+          contextMenu={contextMenu}
+          onClose={closeContextMenu}
+          onCopy={() => void copyElementToClipboard()}
+          onDelete={deleteSelection}
+          onDuplicate={() => void duplicateElement()}
+          onPaste={(point) => void pasteFromClipboard(point)}
+          onToggleLock={toggleElementLock}
+        />
+
+        <EditorBottomTools
+          addShapeFromKind={addShapeFromKind}
+          addText={addText}
+          imageInputRef={imageInputRef}
+          maxZoom={ZOOM_MAX_PCT}
+          minZoom={ZOOM_MIN_PCT}
+          onZoomFitRequest={onZoomFitRequest}
+          onZoomSliderChange={onZoomSliderChange}
+          ready={ready}
+          setShapesPopoverOpen={setShapesPopoverOpen}
+          setShapesQuickAddKind={setShapesQuickAddKind}
+          setShortcutsOpen={setShortcutsOpen}
+          shapeToolSplitRef={shapeToolSplitRef}
+          shapesPopoverOpen={shapesPopoverOpen}
+          shapesQuickAddKind={shapesQuickAddKind}
+          zoomPercent={zoomPercent}
+        />
 
         {!ready ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -2711,96 +2343,60 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           </div>
         ) : null}
 
-        {ready ? (
-          <EditorFloatingSidebar
-            activePanel={editorSidebarPanel}
-            onSelectPanel={(id) => setEditorSidebarPanel((prev) => (prev === id ? null : id))}
-          />
-        ) : null}
-
-        <EditorLayersPanel
-          open={ready && editorSidebarPanel === 'layers'}
-          onClose={() => setEditorSidebarPanel(null)}
-          rows={layerRows}
-          onSelectLayer={onSelectLayer}
-          onToggleVisible={onToggleLayerVisible}
-          onBringForward={onLayerBringForward}
-          onSendBackward={onLayerSendBackward}
-          onReorder={onLayerReorder}
-          onRenameLayer={onRenameLayer}
-        />
-        <EditorUploadsPanel
-          open={ready && editorSidebarPanel === 'uploads'}
-          onClose={() => setEditorSidebarPanel(null)}
-        />
-        <EditorImagesPanel
-          open={ready && editorSidebarPanel === 'images'}
-          onClose={() => setEditorSidebarPanel(null)}
-          controller={aiController}
-        />
-        <EditorVectorBoardPanel
-          open={ready && editorSidebarPanel === 'vector-board'}
-          onClose={() => setEditorSidebarPanel(null)}
-          boards={vectorBoards}
+        <EditorSidePanels
+          activePanel={editorSidebarPanel}
+          aiController={aiController}
           boardDocs={vectorBoardDocs}
-          onCreateNew={createVectorBoard}
-          onOpenBoard={openVectorBoardWorkspace}
-          onDeleteBoard={deleteVectorBoard}
+          boards={vectorBoards}
+          closeVectorWorkspace={closeVectorWorkspace}
+          createVectorBoard={createVectorBoard}
+          deleteVectorBoard={deleteVectorBoard}
+          layerRows={layerRows}
+          onClosePanel={() => setEditorSidebarPanel(null)}
+          onLayerBringForward={onLayerBringForward}
+          onLayerReorder={onLayerReorder}
+          onLayerSendBackward={onLayerSendBackward}
+          onRenameLayer={onRenameLayer}
+          onSelectLayer={onSelectLayer}
+          onSelectPanel={(id) => setEditorSidebarPanel((prev) => (prev === id ? null : id))}
+          onToggleLayerVisible={onToggleLayerVisible}
+          onVectorBoardDocumentChange={onVectorBoardDocumentChange}
+          openVectorBoardWorkspace={openVectorBoardWorkspace}
+          placeActiveVectorBoardAtArtboardCenter={placeActiveVectorBoardAtArtboardCenter}
+          ready={ready}
+          vectorWorkspaceId={vectorWorkspaceId}
+          vectorWorkspaceName={vectorWorkspaceName}
         />
-        <EditorAppsPanel
-          open={ready && editorSidebarPanel === 'apps'}
-          onClose={() => setEditorSidebarPanel(null)}
-          controller={aiController}
-        />
-        <EditorAiPanel
-          open={ready && editorSidebarPanel === 'ai'}
-          onClose={() => setEditorSidebarPanel(null)}
-          controller={aiController}
-        />
-        {vectorWorkspaceId ? (
-          <VectorBoardWorkspace
-            open
-            boardName={vectorWorkspaceName}
-            document={vectorBoardDocs[vectorWorkspaceId] ?? emptyVectorBoardDocument()}
-            onDocumentChange={(next) => onVectorBoardDocumentChange(vectorWorkspaceId, next)}
-            onSave={closeVectorWorkspace}
-            onSaveAndPlace={() => {
-              placeActiveVectorBoardAtArtboardCenter()
-              closeVectorWorkspace()
-            }}
-            onClose={closeVectorWorkspace}
-          />
-        ) : null}
         <EditorShortcutsModal
           open={shortcutsOpen}
           onClose={() => setShortcutsOpen(false)}
         />
-      <ImageCropModal
-        open={imageCropOpen}
-        imageSrc={imageCropSrc}
-        initialCrop={imageCropInitial}
-        onCancel={cancelImageCrop}
-        onApply={applyImageCropFromModal}
-      />
-      {ready && transformDimensionUi
-        ? createPortal(
-            <div
-              className="pointer-events-none fixed z-[10050] rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium leading-5 tabular-nums text-white shadow-md"
-              style={{
-                left: transformDimensionUi.left,
-                top: transformDimensionUi.top,
-              }}
-              role="status"
-              aria-live="polite"
-            >
-              {transformDimensionUi.text}
-            </div>,
-            document.body,
-          )
-        : null}
-    </div>
-  )
-},
+        <ImageCropModal
+          open={imageCropOpen}
+          imageSrc={imageCropSrc}
+          initialCrop={imageCropInitial}
+          onCancel={cancelImageCrop}
+          onApply={applyImageCropFromModal}
+        />
+        {ready && transformDimensionUi
+          ? createPortal(
+              <div
+                className="pointer-events-none fixed z-[10050] rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium leading-5 tabular-nums text-white shadow-md"
+                style={{
+                  left: transformDimensionUi.left,
+                  top: transformDimensionUi.top,
+                }}
+                role="status"
+                aria-live="polite"
+              >
+                {transformDimensionUi.text}
+              </div>,
+              document.body,
+            )
+          : null}
+      </div>
+    )
+  },
 )
 
 export default SceneEditor
