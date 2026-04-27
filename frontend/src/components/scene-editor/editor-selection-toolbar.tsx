@@ -1,21 +1,9 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { CropIcon } from '@hugeicons/core-free-icons'
-import type {
-  Dispatch,
-  ReactNode,
-  RefObject,
-  SetStateAction,
-} from 'react'
 
-import type {
-  ArrowLineStyle,
-  ArrowPathType,
-  AvnacShapeMeta,
-} from '../../lib/avnac-shape-meta'
 import ArtboardResizeToolbarControl from '../artboard-resize-toolbar-control'
 import BackgroundPopover, {
   bgValueToSwatch,
-  type BgValue,
 } from '../background-popover'
 import CornerRadiusToolbarControl from '../corner-radius-toolbar-control'
 import {
@@ -24,21 +12,9 @@ import {
   floatingToolbarIconButton,
 } from '../floating-toolbar-shell'
 import ShapeOptionsToolbar from '../shape-options-toolbar'
-import TextFormatToolbar, {
-  type TextFormatToolbarValues,
-} from '../text-format-toolbar'
-
-type ShapeToolbarModel = {
-  meta: AvnacShapeMeta
-  paint: BgValue
-  rectCornerRadius?: number
-  rectCornerRadiusMax?: number
-}
-
-type ImageCornerToolbar = {
-  radius: number
-  max: number
-}
+import TextFormatToolbar from '../text-format-toolbar'
+import { useEditorSelectionToolbar } from './editor-selection-toolbar-context'
+import { useEditorStore } from './editor-store'
 
 function backgroundTopBtn(disabled?: boolean) {
   const base =
@@ -47,73 +23,45 @@ function backgroundTopBtn(disabled?: boolean) {
   return base
 }
 
-export function EditorSelectionToolbar({
-  applyArrowLineStyle,
-  applyArrowPathType,
-  applyArrowRoundedEnds,
-  applyArrowStrokeWidth,
-  applyBackgroundPicked,
-  applyImageCornerRadius,
-  applyPaintToSelection,
-  applyPolygonSides,
-  applyRectCornerRadius,
-  applyStarPoints,
-  artboardH,
-  artboardW,
-  backgroundPopoverAnchorRef,
-  backgroundPopoverOpenUpward,
-  backgroundPopoverPanelRef,
-  backgroundPopoverShiftX,
-  bg,
-  bgPopoverOpen,
-  canvasBodySelected,
-  elementToolbarLockedDisplay,
-  hasObjectSelected,
-  imageCornerToolbar,
-  onArtboardResize,
-  onTextFormatChange,
-  openImageCropModal,
-  ready,
-  selectionEffectsFooterSlot,
-  selectionToolsRef,
-  setBgPopoverOpen,
-  shapeToolbarModel,
-  textToolbarValues,
-  viewportRef,
-}: {
-  applyArrowLineStyle: (style: ArrowLineStyle) => void
-  applyArrowPathType: (pathType: ArrowPathType) => void
-  applyArrowRoundedEnds: (rounded: boolean) => void
-  applyArrowStrokeWidth: (width: number) => void
-  applyBackgroundPicked: (bg: BgValue) => void
-  applyImageCornerRadius: (radius: number) => void
-  applyPaintToSelection: (bg: BgValue) => void
-  applyPolygonSides: (sides: number) => void
-  applyRectCornerRadius: (radius: number) => void
-  applyStarPoints: (points: number) => void
-  artboardH: number
-  artboardW: number
-  backgroundPopoverAnchorRef: RefObject<HTMLDivElement | null>
-  backgroundPopoverOpenUpward: boolean
-  backgroundPopoverPanelRef: RefObject<HTMLDivElement | null>
-  backgroundPopoverShiftX: number
-  bg: BgValue
-  bgPopoverOpen: boolean
-  canvasBodySelected: boolean
-  elementToolbarLockedDisplay: boolean
-  hasObjectSelected: boolean
-  imageCornerToolbar: ImageCornerToolbar | null
-  onArtboardResize: (width: number, height: number) => void
-  onTextFormatChange: (next: Partial<TextFormatToolbarValues>) => void
-  openImageCropModal: () => void
-  ready: boolean
-  selectionEffectsFooterSlot: ReactNode
-  selectionToolsRef: RefObject<HTMLDivElement | null>
-  setBgPopoverOpen: Dispatch<SetStateAction<boolean>>
-  shapeToolbarModel: ShapeToolbarModel | null
-  textToolbarValues: TextFormatToolbarValues | null
-  viewportRef: RefObject<HTMLDivElement | null>
-}) {
+export function EditorSelectionToolbar() {
+  const { actions, refs, state } = useEditorSelectionToolbar()
+  const artboard = useEditorStore((storeState) => storeState.doc.artboard)
+  const bg = useEditorStore((storeState) => storeState.doc.bg)
+  const {
+    applyArrowLineStyle,
+    applyArrowPathType,
+    applyArrowRoundedEnds,
+    applyArrowStrokeWidth,
+    applyBackgroundPicked,
+    applyImageCornerRadius,
+    applyPaintToSelection,
+    applyPolygonSides,
+    applyRectCornerRadius,
+    applyStarPoints,
+    onArtboardResize,
+    onTextFormatChange,
+    openImageCropModal,
+    toggleBackgroundPopover,
+  } = actions
+  const {
+    backgroundPopoverAnchorRef,
+    backgroundPopoverPanelRef,
+    selectionToolsRef,
+    viewportRef,
+  } = refs
+  const {
+    backgroundPopoverOpenUpward,
+    backgroundPopoverShiftX,
+    bgPopoverOpen,
+    canvasBodySelected,
+    elementToolbarLockedDisplay,
+    hasObjectSelected,
+    imageCornerToolbar,
+    ready,
+    selectionEffectsFooterSlot,
+    shapeToolbarModel,
+    textToolbarValues,
+  } = state
   return (
     <div
       ref={selectionToolsRef}
@@ -184,8 +132,8 @@ export function EditorSelectionToolbar({
         <div ref={backgroundPopoverAnchorRef} className="relative">
           <div className="flex items-center rounded-full border border-black/[0.08] bg-white/90 px-2 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md">
             <ArtboardResizeToolbarControl
-              width={artboardW}
-              height={artboardH}
+              width={artboard.width}
+              height={artboard.height}
               onResize={onArtboardResize}
               viewportRef={viewportRef}
             />
@@ -193,7 +141,7 @@ export function EditorSelectionToolbar({
             <button
               type="button"
               className={backgroundTopBtn(false)}
-              onClick={() => setBgPopoverOpen((open) => !open)}
+              onClick={toggleBackgroundPopover}
               aria-label="Page background"
               aria-expanded={bgPopoverOpen}
             >
