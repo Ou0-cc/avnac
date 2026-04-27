@@ -1,5 +1,10 @@
+import {
+  ArrowDown01Icon,
+  CloudUploadIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePostHog } from "posthog-js/react";
 import DeleteConfirmDialog from "../components/delete-confirm-dialog";
 import FileGridCard from "../components/file-grid-card";
@@ -9,8 +14,10 @@ import { avnacDocumentPreviewEvictPersistId } from "../lib/avnac-document-previe
 import {
   idbDeleteDocument,
   idbListDocuments,
+  idbPutDocument,
   type AvnacEditorIdbListItem,
 } from "../lib/avnac-editor-idb";
+import { parseAvnacDocument } from "../lib/avnac-document";
 import { downloadAvnacJsonForId } from "../lib/avnac-files-export";
 
 export const Route = createFileRoute("/files")({
@@ -28,17 +35,27 @@ function formatUpdatedAt(ts: number): string {
   }
 }
 
+function nameFromImportFilename(filename: string): string {
+  const base = filename.replace(/\.[^.]+$/, "").trim();
+  return base || "Imported file";
+}
+
 function FilesPage() {
   const [items, setItems] = useState<AvnacEditorIdbListItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [newCanvasOpen, setNewCanvasOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{
     ids: string[];
     title: string;
     message: string;
   } | null>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const posthog = usePostHog();
+  const navigate = Route.useNavigate();
 
   const clearSelection = useCallback(() => setSelectedIds([]), []);
 
@@ -76,6 +93,23 @@ function FilesPage() {
       return next.length === prev.length ? prev : next;
     });
   }, [items]);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = actionsRef.current;
+      if (el && !el.contains(e.target as Node)) setActionsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActionsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [actionsOpen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -150,7 +184,65 @@ function FilesPage() {
     });
   }, []);
 
+  const importFromJsonFile = useCallback(
+    async (file: File) => {
+      setImportError(null);
+      setActionsOpen(false);
+      try {
+        let raw: unknown;
+        try {
+          raw = JSON.parse(await file.text()) as unknown;
+        } catch (err) {
+          posthog.captureException(err);
+          setImportError(
+            "That file is not valid JSON. Choose an exported Avnac JSON document and try again.",
+          );
+          return;
+        }
+        const document = parseAvnacDocument(raw);
+        if (!document) {
+          setImportError(
+            "This JSON file could not be imported. Try an Avnac export or a legacy Fabric-based Avnac file.",
+          );
+          return;
+        }
+        const id = crypto.randomUUID();
+        const name = nameFromImportFilename(file.name);
+        await idbPutDocument(id, document, { name });
+        posthog.capture("file_imported", {
+          file_id: id,
+          file_name: name,
+          source_name: file.name,
+          source_type: "json",
+          imported_version: document.v,
+        });
+        refreshList();
+        void navigate({ to: "/create", search: { id } });
+      } catch (err) {
+        posthog.captureException(err);
+        setImportError(
+          "The file could not be imported into this browser right now. Try again in a moment.",
+        );
+      }
+    },
+    [navigate, posthog, refreshList],
+  );
+
+  const onImportInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      void importFromJsonFile(file);
+    },
+    [importFromJsonFile],
+  );
+
   const selectionCount = selectedIds.length;
+  const actionButtonClass =
+    "inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-[var(--text)] text-[15px] font-medium text-white transition hover:bg-[#262626] sm:min-h-12 sm:text-[1.0625rem]";
+  const menuItemClass =
+    "flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-[14px] font-medium text-[var(--text)] transition-colors hover:bg-black/[0.04]";
 
   return (
     <main className="hero-page relative flex min-h-[100dvh] flex-col overflow-hidden">
@@ -161,13 +253,58 @@ function FilesPage() {
       <div className="relative z-[1] flex flex-1 flex-col">
         <div className="pointer-events-none fixed inset-x-0 top-0 z-[200] pt-4 sm:pt-5">
           <div className="mx-auto flex w-full max-w-6xl justify-end px-5 sm:px-8 pointer-events-auto">
-            <button
-              type="button"
-              className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-[var(--text)] px-6 py-2.5 text-[15px] font-medium text-white transition hover:bg-[#262626] sm:min-h-12 sm:px-8 sm:py-3 sm:text-[1.0625rem]"
-              onClick={() => setNewCanvasOpen(true)}
-            >
-              New file
-            </button>
+            <div ref={actionsRef} className="relative flex shrink-0">
+              <button
+                type="button"
+                className={`${actionButtonClass} rounded-l-full px-6 py-2.5 sm:px-8 sm:py-3`}
+                onClick={() => setNewCanvasOpen(true)}
+              >
+                New file
+              </button>
+              <button
+                type="button"
+                aria-label="More file actions"
+                aria-expanded={actionsOpen}
+                aria-haspopup="menu"
+                className={`${actionButtonClass} rounded-r-full border-l border-white/18 px-4 py-2.5 sm:px-5 sm:py-3`}
+                onClick={() => setActionsOpen((open) => !open)}
+              >
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  size={18}
+                  strokeWidth={1.85}
+                  className="shrink-0"
+                />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="sr-only"
+                onChange={onImportInputChange}
+              />
+              {actionsOpen ? (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 min-w-[14rem] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.12)]"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <HugeiconsIcon
+                      icon={CloudUploadIcon}
+                      size={18}
+                      strokeWidth={1.7}
+                      className="shrink-0 text-[var(--text-muted)]"
+                    />
+                    Import JSON
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -189,6 +326,12 @@ function FilesPage() {
             {loadError ? (
               <p className="text-base leading-relaxed text-red-600">
                 {loadError}
+              </p>
+            ) : null}
+
+            {importError ? (
+              <p className="mt-4 text-base leading-relaxed text-red-600">
+                {importError}
               </p>
             ) : null}
 
