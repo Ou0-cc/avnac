@@ -23,6 +23,13 @@ export function isImageFile(file: File): boolean {
   return /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name)
 }
 
+export function transferMayContainFiles(dt: DataTransfer | null): boolean {
+  if (!dt) return false
+  return Array.from(dt.types).some(
+    (type) => type === 'Files' || type === 'application/x-moz-file',
+  )
+}
+
 export function imageFilesFromTransfer(dt: DataTransfer | null): File[] {
   if (!dt) return []
   const files = Array.from(dt.files).filter(isImageFile)
