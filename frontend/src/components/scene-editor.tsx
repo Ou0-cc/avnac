@@ -126,6 +126,7 @@ import {
   rotateDeltaToScene,
   sceneSnapThreshold,
   snapAngle,
+  transferMayContainFiles,
   type DragState,
   type LayerReorderKind,
   type MarqueeRect,
@@ -769,8 +770,16 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     )
 
     const addImageFromFiles = useCallback(
-      async (files: FileList | File[] | null | undefined) => {
+      async (
+        files: FileList | File[] | null | undefined,
+        opts?: {
+          x?: number
+          y?: number
+          origin?: 'center' | 'top-left'
+        },
+      ) => {
         const list = files ? Array.from(files) : []
+        let placedCount = 0
         for (const file of list) {
           if (!isImageFile(file)) continue
           const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -779,7 +788,23 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
             reader.onerror = () => reject(reader.error)
             reader.readAsDataURL(file)
           })
-          await placeImageObject(dataUrl)
+          await placeImageObject(
+            dataUrl,
+            opts
+              ? {
+                  ...opts,
+                  x:
+                    typeof opts.x === 'number'
+                      ? opts.x + placedCount * CLIPBOARD_PASTE_OFFSET
+                      : opts.x,
+                  y:
+                    typeof opts.y === 'number'
+                      ? opts.y + placedCount * CLIPBOARD_PASTE_OFFSET
+                      : opts.y,
+                }
+              : undefined,
+          )
+          placedCount += 1
         }
       },
       [placeImageObject],
@@ -1717,6 +1742,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const onViewportDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
       if (
         e.dataTransfer.types.includes(AVNAC_VECTOR_BOARD_DRAG_MIME) ||
+        transferMayContainFiles(e.dataTransfer) ||
         imageFilesFromTransfer(e.dataTransfer).length > 0 ||
         !!extractImageUrlFromDataTransfer(e.dataTransfer)
       ) {
@@ -1736,7 +1762,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         }
         const files = imageFilesFromTransfer(e.dataTransfer)
         if (files.length > 0) {
-          void addImageFromFiles(files)
+          void addImageFromFiles(files, { x: pt.x, y: pt.y, origin: 'top-left' })
           return
         }
         const imageUrl = extractImageUrlFromDataTransfer(e.dataTransfer)
