@@ -1623,6 +1623,26 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       ],
     )
 
+    const onWorkspacePointerDown = useCallback(
+      (e: ReactPointerEvent<HTMLDivElement>) => {
+        if (e.button !== 0) return
+        const targetNode = e.target as Node
+        if (artboardOuterRef.current?.contains(targetNode)) return
+        const targetEl = e.target as HTMLElement | null
+        if (targetEl?.closest?.('[data-avnac-chrome]')) return
+        if (textEditingId) {
+          commitTextDraft()
+        }
+        setContextMenu(null)
+        setHoveredId(null)
+        setBackgroundHovered(false)
+        setBackgroundActive(false)
+        setMarqueeRect(null)
+        setSelectedIds([])
+      },
+      [commitTextDraft, setHoveredId, setSelectedIds, textEditingId],
+    )
+
     const onArtboardPointerEnter = useCallback(() => {
       setBackgroundHovered(true)
     }, [])
@@ -1896,6 +1916,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           onContextMenu={ready ? onViewportContextMenu : undefined}
           onDragOver={ready ? onViewportDragOver : undefined}
           onDrop={ready ? onViewportDrop : undefined}
+          onPointerDown={ready ? onWorkspacePointerDown : undefined}
         >
           <CanvasStageProvider value={canvasStageValue}>
             <CanvasStage />
