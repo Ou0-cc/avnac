@@ -2,11 +2,11 @@ import type { SceneBounds, SceneSnapGuide } from './types'
 
 export const SNAP_DEADBAND_PX = 0.25
 
-const SNAP_SWITCH_HYSTERESIS_PX = 4
-const SNAP_RELEASE_MULTIPLIER = 2.5
+const SNAP_SWITCH_HYSTERESIS_PX = 1.5
+const SNAP_RELEASE_MULTIPLIER = 1.6
 
 export function sceneSnapThreshold(boardW: number, boardH: number) {
-  return Math.max(20, Math.round(Math.min(boardW, boardH) * 0.006))
+  return Math.max(8, Math.round(Math.min(boardW, boardH) * 0.0025))
 }
 
 export function computeSceneSnap(
