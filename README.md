@@ -18,7 +18,7 @@ It is built around a fast local workflow: open a file, design directly on the ca
 ## Stack
 
 - Frontend: React, Vite, TypeScript, Tailwind CSS, TanStack Router
-- Canvas/rendering: Fabric.js
+- Canvas/rendering: Custom scene engine with HTML/SVG editing and Canvas export
 - AI UI/runtime: `@tambo-ai/react`
 - Analytics: PostHog
 - Optional proxy/API layer: Elysia
