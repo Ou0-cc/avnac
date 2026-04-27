@@ -11,9 +11,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { useStore } from 'zustand'
 import {
   AVNAC_DOC_VERSION,
-  AVNAC_STORAGE_KEY,
   cloneAvnacDocument,
   cloneSceneObject,
   createEmptyAvnacDocument,
@@ -25,7 +25,6 @@ import {
   getObjectStrokeWidth,
   getSelectionBounds,
   maxCornerRadiusForObject,
-  objectDisplayName,
   objectSupportsFill,
   objectSupportsOutlineStroke,
   parseAvnacDocument,
@@ -43,20 +42,8 @@ import {
   type SceneObject,
   type SceneText,
 } from '../lib/avnac-scene'
-import { idbGetDocument, idbPutDocument } from '../lib/avnac-editor-idb'
-import {
-  loadVectorBoardDocs,
-  loadVectorBoards,
-  mergeVectorBoardDocsForMeta,
-  saveVectorBoardDocs,
-  saveVectorBoards,
-  type AvnacVectorBoardMeta,
-} from '../lib/avnac-vector-boards-storage'
 import {
   AVNAC_VECTOR_BOARD_DRAG_MIME,
-  emptyVectorBoardDocument,
-  vectorDocHasRenderableStrokes,
-  type VectorBoardDocument,
 } from '../lib/avnac-vector-board-document'
 import {
   layoutSceneText,
@@ -86,14 +73,13 @@ import ImageCropModal, {
 } from './image-crop-modal'
 import type { ExportPngOptions } from './editor-export-menu'
 import type { EditorSidebarPanelId } from './editor-floating-sidebar'
-import type { EditorLayerRow } from './editor-layers-panel'
-import type {
-  AiDesignController,
-  AiObjectKind,
-  AiObjectSummary,
-} from '../lib/avnac-ai-controller'
 import EditorShortcutsModal from './editor-shortcuts-modal'
+import { AiControllerProvider } from './scene-editor/ai-controller-context'
 import { CanvasStage } from './scene-editor/canvas-stage'
+import {
+  CanvasStageProvider,
+  type CanvasStageContextValue,
+} from './scene-editor/canvas-stage-context'
 import { EditorBottomTools } from './scene-editor/editor-bottom-tools'
 import {
   EditorContextMenu,
@@ -101,7 +87,22 @@ import {
 } from './scene-editor/editor-context-menu'
 import { EditorSidePanels } from './scene-editor/editor-side-panels'
 import { EditorSelectionToolbar } from './scene-editor/editor-selection-toolbar'
+import {
+  createEditorStore,
+  EditorStoreProvider,
+  type EditorStoreApi,
+} from './scene-editor/editor-store'
+import {
+  EditorSelectionToolbarProvider,
+  type EditorSelectionToolbarContextValue,
+} from './scene-editor/editor-selection-toolbar-context'
+import { useAiDesignController } from './scene-editor/use-ai-design-controller'
 import { useEditorKeyboardShortcuts } from './scene-editor/use-editor-keyboard-shortcuts'
+import { useSceneDocumentLifecycle } from './scene-editor/use-scene-document-lifecycle'
+import {
+  useVectorBoardControls,
+  VectorBoardControlsProvider,
+} from './scene-editor/use-vector-board-controls'
 import {
   SNAP_DEADBAND_PX,
   angleFromPoints,
@@ -228,23 +229,27 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const historyTimerRef = useRef<number | null>(null)
     const snapGuideXRef = useRef<number | null>(null)
     const snapGuideYRef = useRef<number | null>(null)
+    const editorStoreRef = useRef<EditorStoreApi | null>(null)
 
-    const [doc, setDoc] = useState<AvnacDocument>(() =>
-      createEmptyAvnacDocument(
-        clampDimension(initialArtboardWidth, DEFAULT_ARTBOARD_W),
-        clampDimension(initialArtboardHeight, DEFAULT_ARTBOARD_H),
-      ),
-    )
+    if (!editorStoreRef.current) {
+      editorStoreRef.current = createEditorStore(
+        createEmptyAvnacDocument(
+          clampDimension(initialArtboardWidth, DEFAULT_ARTBOARD_W),
+          clampDimension(initialArtboardHeight, DEFAULT_ARTBOARD_H),
+        ),
+      )
+    }
+    const editorStore = editorStoreRef.current
+    const doc = useStore(editorStore, (state) => state.doc)
+    const setDoc = useStore(editorStore, (state) => state.setDoc)
+    const selectedIds = useStore(editorStore, (state) => state.selectedIds)
+    const setSelectedIds = useStore(editorStore, (state) => state.setSelectedIds)
+    const setHoveredId = useStore(editorStore, (state) => state.setHoveredId)
+
     const [ready, setReady] = useState(false)
     const [zoomPercent, setZoomPercent] = useState<number | null>(null)
-    const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [editorSidebarPanel, setEditorSidebarPanel] =
       useState<EditorSidebarPanelId | null>(null)
-    const [vectorBoards, setVectorBoards] = useState<AvnacVectorBoardMeta[]>([])
-    const [vectorBoardDocs, setVectorBoardDocs] = useState<
-      Record<string, VectorBoardDocument>
-    >({})
-    const [vectorWorkspaceId, setVectorWorkspaceId] = useState<string | null>(null)
     const [bgPopoverOpen, setBgPopoverOpen] = useState(false)
     const [shortcutsOpen, setShortcutsOpen] = useState(false)
     const [shapesPopoverOpen, setShapesPopoverOpen] = useState(false)
@@ -264,7 +269,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       useState<EditorContextMenuState | null>(null)
     const [textEditingId, setTextEditingId] = useState<string | null>(null)
     const [textDraft, setTextDraft] = useState('')
-    const [hoveredId, setHoveredId] = useState<string | null>(null)
     const [backgroundActive, setBackgroundActive] = useState(false)
     const [backgroundHovered, setBackgroundHovered] = useState(false)
     const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null)
@@ -302,14 +306,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       selectedSingle?.type === 'text' && textEditingId === selectedSingle.id
     const hasObjectSelected = selectedObjects.length > 0
     const canvasBodySelected = ready && !hasObjectSelected
-    const hoveredObject = useMemo(
-      () =>
-        hoveredId
-          ? doc.objects.find((obj) => obj.id === hoveredId && obj.visible) ?? null
-          : null,
-      [doc.objects, hoveredId],
-    )
-
     const fitZoom = useCallback(() => {
       const viewport = viewportRef.current
       if (!viewport) return
@@ -332,121 +328,35 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       fitZoom()
     }, [artboardW, artboardH, fitZoom, zoomPercent])
 
-    useEffect(() => {
-      let cancelled = false
-      setReady(false)
-      ;(async () => {
-        let nextDoc: AvnacDocument | null = null
-        if (persistId) {
-          const raw = await idbGetDocument(persistId)
-          nextDoc = raw ? parseAvnacDocument(raw) : null
-        } else {
-          try {
-            const raw = localStorage.getItem(AVNAC_STORAGE_KEY)
-            nextDoc = raw ? parseAvnacDocument(JSON.parse(raw)) : null
-          } catch {
-            nextDoc = null
-          }
-        }
-        const base =
-          nextDoc ??
-          createEmptyAvnacDocument(
-            clampDimension(initialArtboardWidth, DEFAULT_ARTBOARD_W),
-            clampDimension(initialArtboardHeight, DEFAULT_ARTBOARD_H),
-          )
-        const boards = persistId ? loadVectorBoards(persistId) : []
-        const docs = persistId ? loadVectorBoardDocs(persistId) : {}
-        const merged = persistId
-          ? mergeVectorBoardDocsForMeta(boards, docs)
-          : docs
-        if (cancelled) return
-        setDoc(base)
-        setVectorBoards(boards)
-        setVectorBoardDocs(merged)
-        setSelectedIds([])
-        setTextEditingId(null)
-        historyRef.current = [cloneAvnacDocument(base)]
-        historyIndexRef.current = 0
-        zoomUserAdjustedRef.current = false
-        setZoomPercent(100)
-        setReady(true)
-      })()
-      return () => {
-        cancelled = true
-      }
-    }, [persistId, initialArtboardWidth, initialArtboardHeight])
-
-    useEffect(() => {
-      onReadyChange?.(ready)
-    }, [onReadyChange, ready])
-
-    useEffect(() => {
-      if (!ready) return
-      if (historyTimerRef.current) window.clearTimeout(historyTimerRef.current)
-      historyTimerRef.current = window.setTimeout(() => {
-        if (applyingHistoryRef.current) return
-        const snap = cloneAvnacDocument(doc)
-        const serialized = JSON.stringify(snap)
-        const current = historyRef.current[historyIndexRef.current]
-        if (current && JSON.stringify(current) === serialized) return
-        historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1)
-        historyRef.current.push(snap)
-        historyIndexRef.current = historyRef.current.length - 1
-      }, 140)
-      return () => {
-        if (historyTimerRef.current) window.clearTimeout(historyTimerRef.current)
-      }
-    }, [doc, ready])
-
-    useEffect(() => {
-      if (!ready) return
-      if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
-      autosaveTimerRef.current = window.setTimeout(() => {
-        const snapshot = cloneAvnacDocument(doc)
-        if (!persistIdRef.current) {
-          localStorage.setItem(AVNAC_STORAGE_KEY, JSON.stringify(snapshot))
-          return
-        }
-        void idbPutDocument(persistIdRef.current, snapshot, {
-          name: persistDisplayNameRef.current,
-        }).catch((error) => {
-          console.error('[avnac] autosave failed', error)
-        })
-      }, 240)
-      return () => {
-        if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current)
-      }
-    }, [doc, ready])
-
-    useEffect(() => {
-      if (!persistId || !ready) return
-      saveVectorBoards(persistId, vectorBoards)
-    }, [persistId, ready, vectorBoards])
-
-    useEffect(() => {
-      if (!persistId || !ready) return
-      saveVectorBoardDocs(persistId, vectorBoardDocs)
-    }, [persistId, ready, vectorBoardDocs])
+    useSceneDocumentLifecycle({
+      applyingHistoryRef,
+      autosaveTimerRef,
+      defaultArtboardH: DEFAULT_ARTBOARD_H,
+      defaultArtboardW: DEFAULT_ARTBOARD_W,
+      doc,
+      historyIndexRef,
+      historyRef,
+      historyTimerRef,
+      initialArtboardHeight,
+      initialArtboardWidth,
+      onReadyChange,
+      persistDisplayNameRef,
+      persistId,
+      persistIdRef,
+      ready,
+      setDoc,
+      setReady,
+      setSelectedIds,
+      setTextEditingId,
+      setZoomPercent,
+      zoomUserAdjustedRef,
+    })
 
     useEffect(() => {
       if (!exportError) return
       const timer = window.setTimeout(() => setExportError(null), 4500)
       return () => window.clearTimeout(timer)
     }, [exportError])
-
-    const layerRows = useMemo<EditorLayerRow[]>(
-      () =>
-        [...doc.objects]
-          .map((obj, index) => ({
-            id: obj.id,
-            index,
-            label: objectDisplayName(obj),
-            visible: obj.visible,
-            selected: selectedIds.includes(obj.id),
-          }))
-          .reverse(),
-      [doc.objects, selectedIds],
-    )
 
     const selectionBounds = useMemo(
       () => getSelectionBounds(selectedObjects),
@@ -631,6 +541,19 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       setDoc((prev) => ({ ...prev, objects: [...prev.objects, ...objectsToAdd] }))
       pushSelectionToTop(objectsToAdd.map((obj) => obj.id))
     }, [pushSelectionToTop])
+
+    const vectorBoardControls = useVectorBoardControls({
+      addObjects,
+      artboardH,
+      artboardW,
+      persistId,
+      ready,
+      setDoc,
+    })
+    const {
+      boardDocs: vectorBoardDocs,
+      placeVectorBoard,
+    } = vectorBoardControls
 
     const defaultShapeBox = useMemo(
       () => ({
@@ -1257,139 +1180,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       setImageCropOpen(false)
     }, [])
 
-    const onLayerReorder = useCallback((orderedLayerIds: string[]) => {
-      const byId = new Map(doc.objects.map((obj) => [obj.id, obj]))
-      const next = [...orderedLayerIds]
-        .reverse()
-        .map((id) => byId.get(id))
-        .filter((obj): obj is SceneObject => !!obj)
-      setDoc((prev) => ({ ...prev, objects: next }))
-    }, [doc.objects])
-
-    const onSelectLayer = useCallback((stackIndex: number) => {
-      const obj = doc.objects[stackIndex]
-      if (!obj) return
-      setSelectedIds([obj.id])
-    }, [doc.objects])
-
-    const onToggleLayerVisible = useCallback((stackIndex: number) => {
-      setDoc((prev) => ({
-        ...prev,
-        objects: prev.objects.map((obj, index) =>
-          index === stackIndex ? { ...obj, visible: !obj.visible } : obj,
-        ),
-      }))
-    }, [])
-
-    const onLayerBringForward = useCallback((stackIndex: number) => {
-      setDoc((prev) => {
-        if (stackIndex >= prev.objects.length - 1) return prev
-        const next = [...prev.objects]
-        const swap = next[stackIndex]
-        next[stackIndex] = next[stackIndex + 1]
-        next[stackIndex + 1] = swap
-        return { ...prev, objects: next }
-      })
-    }, [])
-
-    const onLayerSendBackward = useCallback((stackIndex: number) => {
-      setDoc((prev) => {
-        if (stackIndex <= 0) return prev
-        const next = [...prev.objects]
-        const swap = next[stackIndex]
-        next[stackIndex] = next[stackIndex - 1]
-        next[stackIndex - 1] = swap
-        return { ...prev, objects: next }
-      })
-    }, [])
-
-    const onRenameLayer = useCallback((stackIndex: number, name: string) => {
-      setDoc((prev) => ({
-        ...prev,
-        objects: prev.objects.map((obj, index) =>
-          index === stackIndex ? { ...obj, name: name.trim() || undefined } : obj,
-        ),
-      }))
-    }, [])
-
-    const createVectorBoard = useCallback(() => {
-      const id = crypto.randomUUID()
-      const board: AvnacVectorBoardMeta = {
-        id,
-        name: `Vector ${vectorBoards.length + 1}`,
-        createdAt: Date.now(),
-      }
-      setVectorBoards((prev) => [...prev, board])
-      setVectorBoardDocs((prev) => ({
-        ...prev,
-        [id]: emptyVectorBoardDocument(),
-      }))
-      setVectorWorkspaceId(id)
-    }, [vectorBoards.length])
-
-    const deleteVectorBoard = useCallback((id: string) => {
-      setVectorBoards((prev) => prev.filter((board) => board.id !== id))
-      setVectorBoardDocs((prev) => {
-        const next = { ...prev }
-        delete next[id]
-        return next
-      })
-      setDoc((prev) => ({
-        ...prev,
-        objects: prev.objects.filter(
-          (obj) => !(obj.type === 'vector-board' && obj.boardId === id),
-        ),
-      }))
-      if (vectorWorkspaceId === id) setVectorWorkspaceId(null)
-    }, [vectorWorkspaceId])
-
-    const openVectorBoardWorkspace = useCallback((id: string) => {
-      setVectorWorkspaceId(id)
-    }, [])
-
-    const closeVectorWorkspace = useCallback(() => {
-      setVectorWorkspaceId(null)
-    }, [])
-
-    const onVectorBoardDocumentChange = useCallback(
-      (boardId: string, next: VectorBoardDocument) => {
-        setVectorBoardDocs((prev) => ({ ...prev, [boardId]: next }))
-      },
-      [],
-    )
-
-    const placeVectorBoard = useCallback(
-      (boardId: string, x?: number, y?: number) => {
-        const docForBoard = vectorBoardDocs[boardId]
-        if (!docForBoard || !vectorDocHasRenderableStrokes(docForBoard)) return
-        const width = 280
-        const height = 280
-        addObjects([
-          {
-            id: crypto.randomUUID(),
-            type: 'vector-board',
-            x: x ?? artboardW / 2 - width / 2,
-            y: y ?? artboardH / 2 - height / 2,
-            width,
-            height,
-            rotation: 0,
-            opacity: 1,
-            visible: true,
-            locked: false,
-            blurPct: 0,
-            shadow: null,
-            boardId,
-          },
-        ])
-      },
-      [addObjects, artboardH, artboardW, vectorBoardDocs],
-    )
-
-    const placeActiveVectorBoardAtArtboardCenter = useCallback(() => {
-      if (!vectorWorkspaceId) return
-      placeVectorBoard(vectorWorkspaceId)
-    }, [placeVectorBoard, vectorWorkspaceId])
-
     const downloadDocumentJson = useCallback((value: AvnacDocument) => {
       const blob = new Blob([JSON.stringify(value, null, 2)], {
         type: 'application/json',
@@ -1864,11 +1654,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
-    const vectorWorkspaceName = useMemo(
-      () => vectorBoards.find((board) => board.id === vectorWorkspaceId)?.name ?? 'Vector board',
-      [vectorBoards, vectorWorkspaceId],
-    )
-
     useEditorKeyboardShortcuts({
       applyingHistoryRef,
       commitTextDraft,
@@ -1939,219 +1724,15 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       [addImageFromFiles, placeImageObject, placeVectorBoard, pointerToScene],
     )
 
-    const aiController = useMemo<AiDesignController>(
-      () => ({
-        getCanvas: () => ({
-          width: doc.artboard.width,
-          height: doc.artboard.height,
-          background: doc.bg.type === 'solid' ? doc.bg.color : doc.bg.css,
-          objectCount: doc.objects.length,
-          objects: doc.objects.map<AiObjectSummary>((obj) => ({
-            id: obj.id,
-            kind:
-              obj.type === 'vector-board'
-                ? 'vector-board'
-                : obj.type === 'group'
-                  ? 'group'
-                  : (obj.type as AiObjectKind),
-            label: objectDisplayName(obj),
-            left: obj.x,
-            top: obj.y,
-            width: obj.width,
-            height: obj.height,
-            angle: obj.rotation,
-            fill: (() => {
-              const fill = objectSupportsFill(obj) ? getObjectFill(obj) : null
-              return fill?.type === 'solid' ? fill.color : null
-            })(),
-            stroke: (() => {
-              const stroke = objectSupportsOutlineStroke(obj)
-                ? getObjectStroke(obj)
-                : null
-              return stroke?.type === 'solid' ? stroke.color : null
-            })(),
-            text: obj.type === 'text' ? obj.text : null,
-          })),
-        }),
-        addRectangle: (spec) => {
-          const obj: SceneObject = {
-            id: crypto.randomUUID(),
-            type: 'rect',
-            x:
-              (spec.origin === 'top-left' ? spec.x ?? artboardW / 2 : (spec.x ?? artboardW / 2) - spec.width / 2),
-            y:
-              (spec.origin === 'top-left' ? spec.y ?? artboardH / 2 : (spec.y ?? artboardH / 2) - spec.height / 2),
-            width: spec.width,
-            height: spec.height,
-            rotation: spec.rotation ?? 0,
-            opacity: spec.opacity ?? 1,
-            visible: true,
-            locked: false,
-            blurPct: 0,
-            shadow: null,
-            fill: { type: 'solid', color: spec.fill ?? '#262626' },
-            stroke: { type: 'solid', color: spec.stroke ?? 'transparent' },
-            strokeWidth: spec.strokeWidth ?? 0,
-            cornerRadius: spec.cornerRadius ?? 0,
-          }
-          addObjects([obj])
-          return { id: obj.id }
-        },
-        addEllipse: (spec) => {
-          const obj: SceneObject = {
-            id: crypto.randomUUID(),
-            type: 'ellipse',
-            x:
-              (spec.origin === 'top-left' ? spec.x ?? artboardW / 2 : (spec.x ?? artboardW / 2) - spec.width / 2),
-            y:
-              (spec.origin === 'top-left' ? spec.y ?? artboardH / 2 : (spec.y ?? artboardH / 2) - spec.height / 2),
-            width: spec.width,
-            height: spec.height,
-            rotation: spec.rotation ?? 0,
-            opacity: spec.opacity ?? 1,
-            visible: true,
-            locked: false,
-            blurPct: 0,
-            shadow: null,
-            fill: { type: 'solid', color: spec.fill ?? '#262626' },
-            stroke: { type: 'solid', color: spec.stroke ?? 'transparent' },
-            strokeWidth: spec.strokeWidth ?? 0,
-          }
-          addObjects([obj])
-          return { id: obj.id }
-        },
-        addText: (spec) => {
-          const obj: SceneText = {
-            id: crypto.randomUUID(),
-            type: 'text',
-            x:
-              (spec.origin === 'top-left' ? spec.x ?? artboardW / 2 : (spec.x ?? artboardW / 2) - (spec.width ?? 320) / 2),
-            y:
-              (spec.origin === 'top-left' ? spec.y ?? artboardH / 2 : (spec.y ?? artboardH / 2) - (spec.fontSize ?? 64)),
-            width: spec.width ?? 320,
-            height: spec.fontSize ?? 64,
-            rotation: spec.rotation ?? 0,
-            opacity: spec.opacity ?? 1,
-            visible: true,
-            locked: false,
-            blurPct: 0,
-            shadow: null,
-            text: spec.text,
-            fill: { type: 'solid', color: spec.fill ?? '#171717' },
-            stroke: DEFAULT_STROKE,
-            strokeWidth: 0,
-            fontFamily: spec.fontFamily ?? 'Inter',
-            fontSize: spec.fontSize ?? 64,
-            lineHeight: 1.22,
-            fontWeight: spec.fontWeight ?? 'normal',
-            fontStyle: spec.fontStyle ?? 'normal',
-            underline: false,
-            textAlign: spec.textAlign ?? 'left',
-          }
-          obj.height = Math.max(
-            layoutSceneText(obj).height,
-            obj.fontSize * sceneTextLineHeight(obj),
-          )
-          addObjects([obj])
-          return { id: obj.id }
-        },
-        addLine: (spec) => {
-          const width = Math.max(1, Math.hypot(spec.x2 - spec.x1, spec.y2 - spec.y1))
-          const height = Math.max(24, (spec.strokeWidth ?? 4) * 3)
-          const centerX = (spec.x1 + spec.x2) / 2
-          const centerY = (spec.y1 + spec.y2) / 2
-          const obj: SceneLine = {
-            id: crypto.randomUUID(),
-            type: 'line',
-            x: centerX - width / 2,
-            y: centerY - height / 2,
-            width,
-            height,
-            rotation: angleFromPoints(spec.x1, spec.y1, spec.x2, spec.y2),
-            opacity: spec.opacity ?? 1,
-            visible: true,
-            locked: false,
-            blurPct: 0,
-            shadow: null,
-            stroke: { type: 'solid', color: spec.stroke ?? '#262626' },
-            strokeWidth: spec.strokeWidth ?? 4,
-            lineStyle: 'solid',
-            roundedEnds: true,
-          }
-          addObjects([obj])
-          return { id: obj.id }
-        },
-        addImageFromUrl: async (spec) => {
-          const id = await placeImageObject(spec.url, {
-            x: spec.x,
-            y: spec.y,
-            origin: spec.origin,
-            width: spec.width,
-            height: spec.height,
-          })
-          return id ? { id } : null
-        },
-        updateObject: (id, patch) => {
-          let changed = false
-          setDoc((prev) => ({
-            ...prev,
-            objects: prev.objects.map((obj) => {
-              if (obj.id !== id) return obj
-              changed = true
-              let next: SceneObject = { ...obj }
-              if (patch.left !== undefined) next.x = patch.left
-              if (patch.top !== undefined) next.y = patch.top
-              if (patch.width !== undefined) next.width = patch.width
-              if (patch.height !== undefined) next.height = patch.height
-              if (patch.angle !== undefined) next.rotation = patch.angle
-              if (patch.opacity !== undefined)
-                next.opacity = Math.max(0, Math.min(1, patch.opacity))
-              if (patch.fill !== undefined) next = setObjectFill(next, { type: 'solid', color: patch.fill })
-              if (patch.stroke !== undefined) next = setObjectStroke(next, { type: 'solid', color: patch.stroke })
-              if (patch.strokeWidth !== undefined) next = setObjectStrokeWidth(next, patch.strokeWidth)
-              if (next.type === 'text') {
-                if (patch.text !== undefined) next.text = patch.text
-                if (patch.fontSize !== undefined) next.fontSize = patch.fontSize
-                next.height = Math.max(
-                  layoutSceneText(next).height,
-                  next.fontSize * sceneTextLineHeight(next),
-                )
-              }
-              return next
-            }),
-          }))
-          return changed
-        },
-        deleteObject: (id) => {
-          const exists = doc.objects.some((obj) => obj.id === id)
-          if (!exists) return false
-          setDoc((prev) => ({
-            ...prev,
-            objects: prev.objects.filter((obj) => obj.id !== id),
-          }))
-          return true
-        },
-        selectObjects: (ids) => {
-          const valid = ids.filter((id) => doc.objects.some((obj) => obj.id === id))
-          setSelectedIds(valid)
-          return valid.length
-        },
-        setBackgroundColor: (color) => setDoc((prev) => ({ ...prev, bg: { type: 'solid', color } })),
-        clearCanvas: () => {
-          const count = doc.objects.length
-          setDoc((prev) => ({ ...prev, objects: [] }))
-          setSelectedIds([])
-          return count
-        },
-      }),
-      [
-        addObjects,
-        artboardH,
-        artboardW,
-        doc,
-        placeImageObject,
-      ],
-    )
+    const aiController = useAiDesignController({
+      addObjects,
+      artboardH,
+      artboardW,
+      doc,
+      placeImageObject,
+      setDoc,
+      setSelectedIds,
+    })
 
     const selectionEffectsFooterSlot = hasObjectSelected ? (
       <>
@@ -2181,54 +1762,125 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       </>
     ) : null
 
-    return (
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          multiple
-          onChange={(e) => {
-            void addImageFromFiles(e.target.files)
-            e.target.value = ''
-          }}
-        />
+    const selectionToolbarValue: EditorSelectionToolbarContextValue = {
+      actions: {
+        applyArrowLineStyle,
+        applyArrowPathType,
+        applyArrowRoundedEnds,
+        applyArrowStrokeWidth,
+        applyBackgroundPicked,
+        applyImageCornerRadius,
+        applyPaintToSelection,
+        applyPolygonSides,
+        applyRectCornerRadius,
+        applyStarPoints,
+        onArtboardResize,
+        onTextFormatChange,
+        openImageCropModal,
+        toggleBackgroundPopover: () => setBgPopoverOpen((open) => !open),
+      },
+      refs: {
+        backgroundPopoverAnchorRef,
+        backgroundPopoverPanelRef,
+        selectionToolsRef,
+        viewportRef,
+      },
+      state: {
+        backgroundPopoverOpenUpward,
+        backgroundPopoverShiftX,
+        bgPopoverOpen,
+        canvasBodySelected,
+        elementToolbarLockedDisplay,
+        hasObjectSelected,
+        imageCornerToolbar,
+        ready,
+        selectionEffectsFooterSlot,
+        shapeToolbarModel,
+        textToolbarValues,
+      },
+    }
 
-        <EditorSelectionToolbar
-          applyArrowLineStyle={applyArrowLineStyle}
-          applyArrowPathType={applyArrowPathType}
-          applyArrowRoundedEnds={applyArrowRoundedEnds}
-          applyArrowStrokeWidth={applyArrowStrokeWidth}
-          applyBackgroundPicked={applyBackgroundPicked}
-          applyImageCornerRadius={applyImageCornerRadius}
-          applyPaintToSelection={applyPaintToSelection}
-          applyPolygonSides={applyPolygonSides}
-          applyRectCornerRadius={applyRectCornerRadius}
-          applyStarPoints={applyStarPoints}
-          artboardH={artboardH}
-          artboardW={artboardW}
-          backgroundPopoverAnchorRef={backgroundPopoverAnchorRef}
-          backgroundPopoverOpenUpward={backgroundPopoverOpenUpward}
-          backgroundPopoverPanelRef={backgroundPopoverPanelRef}
-          backgroundPopoverShiftX={backgroundPopoverShiftX}
-          bg={doc.bg}
-          bgPopoverOpen={bgPopoverOpen}
-          canvasBodySelected={canvasBodySelected}
-          elementToolbarLockedDisplay={elementToolbarLockedDisplay}
-          hasObjectSelected={hasObjectSelected}
-          imageCornerToolbar={imageCornerToolbar}
-          onArtboardResize={onArtboardResize}
-          onTextFormatChange={onTextFormatChange}
-          openImageCropModal={openImageCropModal}
-          ready={ready}
-          selectionEffectsFooterSlot={selectionEffectsFooterSlot}
-          selectionToolsRef={selectionToolsRef}
-          setBgPopoverOpen={setBgPopoverOpen}
-          shapeToolbarModel={shapeToolbarModel}
-          textToolbarValues={textToolbarValues}
-          viewportRef={viewportRef}
-        />
+    const canvasStageValue: CanvasStageContextValue = {
+      actions: {
+        alignElementToArtboard,
+        alignSelectedElements,
+        commitTextDraft,
+        copyElementToClipboard: () => void copyElementToClipboard(),
+        deleteSelection,
+        duplicateElement: () => void duplicateElement(),
+        groupSelection,
+        onArtboardPointerEnter,
+        onArtboardPointerLeave,
+        onArtboardPointerMove,
+        onObjectHoverChange: (id, hovering) => {
+          setHoveredId((current) => {
+            if (hovering) return id
+            return current === id ? null : current
+          })
+        },
+        onObjectPointerDown,
+        onRotateHandlePointerDown,
+        onSelectionHandlePointerDown,
+        onTextDoubleClick: (textObj) => {
+          if (textObj.locked) return
+          setSelectedIds([textObj.id])
+          setTextEditingId(textObj.id)
+          setTextDraft(textObj.text)
+        },
+        onTextDraftChange: setTextDraft,
+        onViewportPointerDown,
+        pasteFromClipboard: () => void pasteFromClipboard(),
+        toggleElementLock,
+        ungroupSelection,
+      },
+      refs: {
+        artboardInnerRef,
+        artboardOuterRef,
+        elementToolbarRef,
+        viewportRef,
+      },
+      state: {
+        backgroundActive,
+        backgroundHovered,
+        editingSelectedText,
+        elementToolbarAlignAlready,
+        elementToolbarCanAlignElements,
+        elementToolbarCanGroup,
+        elementToolbarCanUngroup: !!elementToolbarCanUngroup,
+        elementToolbarLayout,
+        elementToolbarLockedDisplay,
+        hasObjectSelected,
+        marqueeRect,
+        ready,
+        scale,
+        selectedObjects,
+        selectedSingle,
+        selectionBounds,
+        snapGuides,
+        textDraft,
+        textEditingId,
+      },
+    }
+
+    return (
+      <EditorStoreProvider store={editorStore}>
+        <VectorBoardControlsProvider value={vectorBoardControls}>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              void addImageFromFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+
+        <EditorSelectionToolbarProvider value={selectionToolbarValue}>
+          <EditorSelectionToolbar />
+        </EditorSelectionToolbarProvider>
 
         {exportError ? (
           <div className="pointer-events-none absolute inset-x-0 top-3 z-40 flex justify-center px-3">
@@ -2245,68 +1897,9 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           onDragOver={ready ? onViewportDragOver : undefined}
           onDrop={ready ? onViewportDrop : undefined}
         >
-          <CanvasStage
-            alignElementToArtboard={alignElementToArtboard}
-            alignSelectedElements={alignSelectedElements}
-            artboardH={artboardH}
-            artboardInnerRef={artboardInnerRef}
-            artboardOuterRef={artboardOuterRef}
-            artboardW={artboardW}
-            backgroundActive={backgroundActive}
-            backgroundHovered={backgroundHovered}
-            bg={doc.bg}
-            commitTextDraft={commitTextDraft}
-            copyElementToClipboard={() => void copyElementToClipboard()}
-            deleteSelection={deleteSelection}
-            duplicateElement={() => void duplicateElement()}
-            editingSelectedText={editingSelectedText}
-            elementToolbarAlignAlready={elementToolbarAlignAlready}
-            elementToolbarCanAlignElements={elementToolbarCanAlignElements}
-            elementToolbarCanGroup={elementToolbarCanGroup}
-            elementToolbarCanUngroup={!!elementToolbarCanUngroup}
-            elementToolbarLayout={elementToolbarLayout}
-            elementToolbarLockedDisplay={elementToolbarLockedDisplay}
-            elementToolbarRef={elementToolbarRef}
-            groupSelection={groupSelection}
-            hasObjectSelected={hasObjectSelected}
-            hoveredObject={hoveredObject}
-            marqueeRect={marqueeRect}
-            objects={doc.objects}
-            onArtboardPointerEnter={onArtboardPointerEnter}
-            onArtboardPointerLeave={onArtboardPointerLeave}
-            onArtboardPointerMove={onArtboardPointerMove}
-            onObjectHoverChange={(id, hovering) => {
-              setHoveredId((current) => {
-                if (hovering) return id
-                return current === id ? null : current
-              })
-            }}
-            onObjectPointerDown={onObjectPointerDown}
-            onRotateHandlePointerDown={onRotateHandlePointerDown}
-            onSelectionHandlePointerDown={onSelectionHandlePointerDown}
-            onTextDoubleClick={(textObj) => {
-              if (textObj.locked) return
-              setSelectedIds([textObj.id])
-              setTextEditingId(textObj.id)
-              setTextDraft(textObj.text)
-            }}
-            onTextDraftChange={setTextDraft}
-            onViewportPointerDown={onViewportPointerDown}
-            pasteFromClipboard={() => void pasteFromClipboard()}
-            ready={ready}
-            scale={scale}
-            selectedIds={selectedIds}
-            selectedObjects={selectedObjects}
-            selectedSingle={selectedSingle}
-            selectionBounds={selectionBounds}
-            snapGuides={snapGuides}
-            textDraft={textDraft}
-            textEditingId={textEditingId}
-            toggleElementLock={toggleElementLock}
-            ungroupSelection={ungroupSelection}
-            vectorBoardDocs={vectorBoardDocs}
-            viewportRef={viewportRef}
-          />
+          <CanvasStageProvider value={canvasStageValue}>
+            <CanvasStage />
+          </CanvasStageProvider>
         </div>
 
         <EditorContextMenu
@@ -2343,30 +1936,14 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           </div>
         ) : null}
 
-        <EditorSidePanels
-          activePanel={editorSidebarPanel}
-          aiController={aiController}
-          boardDocs={vectorBoardDocs}
-          boards={vectorBoards}
-          closeVectorWorkspace={closeVectorWorkspace}
-          createVectorBoard={createVectorBoard}
-          deleteVectorBoard={deleteVectorBoard}
-          layerRows={layerRows}
-          onClosePanel={() => setEditorSidebarPanel(null)}
-          onLayerBringForward={onLayerBringForward}
-          onLayerReorder={onLayerReorder}
-          onLayerSendBackward={onLayerSendBackward}
-          onRenameLayer={onRenameLayer}
-          onSelectLayer={onSelectLayer}
-          onSelectPanel={(id) => setEditorSidebarPanel((prev) => (prev === id ? null : id))}
-          onToggleLayerVisible={onToggleLayerVisible}
-          onVectorBoardDocumentChange={onVectorBoardDocumentChange}
-          openVectorBoardWorkspace={openVectorBoardWorkspace}
-          placeActiveVectorBoardAtArtboardCenter={placeActiveVectorBoardAtArtboardCenter}
-          ready={ready}
-          vectorWorkspaceId={vectorWorkspaceId}
-          vectorWorkspaceName={vectorWorkspaceName}
-        />
+        <AiControllerProvider controller={aiController}>
+          <EditorSidePanels
+            activePanel={editorSidebarPanel}
+            onClosePanel={() => setEditorSidebarPanel(null)}
+            onSelectPanel={(id) => setEditorSidebarPanel((prev) => (prev === id ? null : id))}
+            ready={ready}
+          />
+        </AiControllerProvider>
         <EditorShortcutsModal
           open={shortcutsOpen}
           onClose={() => setShortcutsOpen(false)}
@@ -2394,7 +1971,9 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
               document.body,
             )
           : null}
-      </div>
+          </div>
+        </VectorBoardControlsProvider>
+      </EditorStoreProvider>
     )
   },
 )
