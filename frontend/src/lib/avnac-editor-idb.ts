@@ -1,6 +1,8 @@
 import {
   cloneAvnacDocument,
+  getAvnacDocumentStorageKind,
   parseAvnacDocument,
+  type AvnacDocumentStorageKind,
   type AvnacDocument,
 } from './avnac-document'
 import type { VectorBoardDocument } from './avnac-vector-board-document'
@@ -20,6 +22,7 @@ export type AvnacEditorIdbRecord = {
   id: string
   updatedAt: number
   document: AvnacDocument
+  storageKind: Exclude<AvnacDocumentStorageKind, 'invalid'>
   /** User-visible file name (optional on legacy rows). */
   name?: string
 }
@@ -35,12 +38,15 @@ function normalizeEditorRecord(
   row: StoredAvnacEditorIdbRecord | null | undefined,
 ): AvnacEditorIdbRecord | null {
   if (!row || typeof row.id !== 'string') return null
+  const storageKind = getAvnacDocumentStorageKind(row.document)
+  if (storageKind === 'invalid') return null
   const document = parseAvnacDocument(row.document)
   if (!document) return null
   return {
     id: row.id,
     updatedAt: Number.isFinite(row.updatedAt) ? row.updatedAt : Date.now(),
     document,
+    storageKind,
     name: typeof row.name === 'string' ? row.name : undefined,
   }
 }
@@ -95,6 +101,7 @@ export type AvnacEditorIdbListItem = {
   updatedAt: number
   artboardWidth: number
   artboardHeight: number
+  isLegacy: boolean
 }
 
 export async function idbListDocuments(): Promise<AvnacEditorIdbListItem[]> {
@@ -115,6 +122,7 @@ export async function idbListDocuments(): Promise<AvnacEditorIdbListItem[]> {
           updatedAt: row.updatedAt,
           artboardWidth: row.document.artboard.width,
           artboardHeight: row.document.artboard.height,
+          isLegacy: row.storageKind === 'legacy',
         }))
         items.sort((a, b) => b.updatedAt - a.updatedAt)
         resolve(items)
@@ -198,4 +206,14 @@ export async function idbDuplicateDocument(sourceId: string): Promise<string | n
     )
   }
   return newId
+}
+
+export async function idbMigrateLegacyDocument(
+  id: string,
+): Promise<boolean> {
+  const row = await idbGetEditorRecord(id)
+  if (!row) return false
+  if (row.storageKind !== 'legacy') return true
+  await idbPutDocument(id, row.document, { name: row.name })
+  return true
 }
