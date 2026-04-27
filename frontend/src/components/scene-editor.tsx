@@ -1371,9 +1371,9 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           const centeredScaling = e.altKey
           const freeformScaling = e.shiftKey
           const shouldLockShapeAspect =
-            isPerfectShapeObject(initial) &&
             isCornerHandle(drag.handle) &&
-            !freeformScaling
+            (initial.type === 'image' ||
+              (isPerfectShapeObject(initial) && !freeformScaling))
           const anchor = getHandleLocalPosition(
             oppositeHandle(drag.handle),
             initial.width,
@@ -1463,6 +1463,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           const nextObject = resizeObjectWithBox(initial, nextBox, {
             handle: drag.handle,
             initial,
+            centered: centeredScaling,
           })
           const nextBounds = getObjectRotatedBounds(nextObject)
           const frameEl = artboardInnerRef.current
