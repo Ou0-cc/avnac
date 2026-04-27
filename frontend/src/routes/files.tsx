@@ -59,6 +59,7 @@ function FilesPage() {
     title: string;
     message: string;
     confirmLabel: string;
+    triggerSource: "thumbnail" | "title" | "menu" | "banner";
     openFileId?: string;
   } | null>(null);
   const [migrationBusy, setMigrationBusy] = useState(false);
@@ -267,7 +268,15 @@ function FilesPage() {
           title: "Convert this file first",
           message: `"${row.name}" was made in an older version of Avnac. Convert it to the new editor before opening it.`,
           confirmLabel: "Convert and open",
+          triggerSource: source,
           openFileId: row.id,
+        });
+        posthog.capture("legacy_conversion_prompt_opened", {
+          surface: "files_page",
+          trigger_source: source,
+          file_count: 1,
+          file_ids: [row.id],
+          open_after_conversion: true,
         });
         return;
       }
@@ -294,22 +303,40 @@ function FilesPage() {
           : "These files were saved in an older version of Avnac. Convert them now so they open normally in the new editor.",
       confirmLabel:
         legacyItems.length === 1 ? "Convert file" : "Migrate all files",
+      triggerSource: "banner",
+    });
+    posthog.capture("legacy_conversion_prompt_opened", {
+      surface: "files_page",
+      trigger_source: "banner",
+      file_count: legacyItems.length,
+      file_ids: legacyItems.map((row) => row.id),
+      open_after_conversion: false,
     });
   }, [legacyItems]);
 
   const confirmMigration = useCallback(() => {
     if (!migrationDialog || migrationBusy) return;
-    const { ids, openFileId } = migrationDialog;
+    const { ids, openFileId, triggerSource } = migrationDialog;
+    posthog.capture("legacy_conversion_started", {
+      surface: "files_page",
+      trigger_source: triggerSource,
+      file_count: ids.length,
+      file_ids: ids,
+      open_after_conversion: openFileId != null,
+    });
     setMigrationBusy(true);
     void (async () => {
       try {
         for (const id of ids) {
           await idbMigrateLegacyDocument(id);
         }
-        posthog.capture("legacy_files_migrated", {
+        posthog.capture("legacy_conversion_completed", {
+          surface: "files_page",
+          trigger_source: triggerSource,
           file_count: ids.length,
           file_ids: ids,
-          opened_after_migration: openFileId ?? null,
+          open_after_conversion: openFileId != null,
+          opened_file_id: openFileId ?? null,
         });
         setMigrationDialog(null);
         refreshList();
@@ -317,6 +344,13 @@ function FilesPage() {
           void navigate({ to: "/create", search: { id: openFileId } });
         }
       } catch (err) {
+        posthog.capture("legacy_conversion_failed", {
+          surface: "files_page",
+          trigger_source: triggerSource,
+          file_count: ids.length,
+          file_ids: ids,
+          open_after_conversion: openFileId != null,
+        });
         posthog.captureException(err);
         setImportError(
           "Those files could not be converted right now. Try again in a moment.",
@@ -499,6 +533,15 @@ function FilesPage() {
         busy={migrationBusy}
         onClose={() => {
           if (migrationBusy) return;
+          if (migrationDialog) {
+            posthog.capture("legacy_conversion_cancelled", {
+              surface: "files_page",
+              trigger_source: migrationDialog.triggerSource,
+              file_count: migrationDialog.ids.length,
+              file_ids: migrationDialog.ids,
+              open_after_conversion: migrationDialog.openFileId != null,
+            });
+          }
           setMigrationDialog(null);
         }}
         onConfirm={confirmMigration}
