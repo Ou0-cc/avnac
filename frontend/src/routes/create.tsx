@@ -93,6 +93,20 @@ function CreatePage() {
     }
   };
 
+  const legacyBlocked = documentStorageKind === "legacy";
+  const loadingDocument = documentStorageKind === "loading";
+
+  useEffect(() => {
+    if (!legacyBlocked || !id) return;
+    posthog.capture("legacy_conversion_prompt_opened", {
+      surface: "create_page",
+      trigger_source: "direct_open",
+      file_count: 1,
+      file_ids: [id],
+      open_after_conversion: false,
+    });
+  }, [id, legacyBlocked, posthog]);
+
   if (editorUnsupported) {
     return (
       <main className="hero-page relative flex min-h-[100dvh] flex-col overflow-hidden px-5 py-12 sm:px-8 sm:py-16">
@@ -133,20 +147,6 @@ function CreatePage() {
   if (!id) {
     return null;
   }
-
-  const legacyBlocked = documentStorageKind === "legacy";
-  const loadingDocument = documentStorageKind === "loading";
-
-  useEffect(() => {
-    if (!legacyBlocked || !id) return;
-    posthog.capture("legacy_conversion_prompt_opened", {
-      surface: "create_page",
-      trigger_source: "direct_open",
-      file_count: 1,
-      file_ids: [id],
-      open_after_conversion: false,
-    });
-  }, [id, legacyBlocked, posthog]);
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-[var(--surface-subtle)]">
