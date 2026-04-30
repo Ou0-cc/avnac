@@ -4,6 +4,7 @@ import {
   Delete02Icon,
   LayerAddIcon,
 } from '@hugeicons/core-free-icons'
+import { AnimatePresence, motion } from 'motion/react'
 import { useMemo } from 'react'
 
 import {
@@ -163,14 +164,37 @@ export function CanvasStage() {
   return (
     <div className="flex min-h-full w-max min-w-full flex-col items-start px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-4">
       <div className="relative z-0 mx-auto my-auto flex flex-col gap-12">
-        {pages.map((page) => {
+        <AnimatePresence initial={false}>
+          {pages.map((page) => {
           const isActive = page.id === doc.activePageId
           const pageW = page.artboard.width
           const pageH = page.artboard.height
           const pageObjects = page.objects
 
           return (
-            <div key={page.id} className="relative inline-block">
+            <motion.div
+              key={page.id}
+              className="relative inline-block"
+              data-avnac-page-id={page.id}
+              style={{ originX: 0.5, originY: 0 }}
+              initial={{ opacity: 0, y: 24, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{
+                opacity: 0,
+                y: -28,
+                scale: 0.965,
+                filter: 'blur(6px)',
+                transition: {
+                  duration: 0.22,
+                  ease: [0.4, 0, 0.2, 1],
+                },
+              }}
+              transition={{
+                opacity: { duration: 0.18, ease: 'easeOut' },
+                y: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+                scale: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+              }}
+            >
               <CanvasPageControls
                 artboardWidth={pageW * scale}
                 canDeletePage={canDeletePage}
@@ -318,9 +342,10 @@ export function CanvasStage() {
                   ) : null}
                 </div>
               </div>
-            </div>
+            </motion.div>
           )
         })}
+        </AnimatePresence>
       </div>
     </div>
   )
