@@ -471,6 +471,15 @@ function Landing() {
                 GitHub
               </a>
             </div>
+            <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
+              <span>Want to back the project?</span>
+              <Link
+                to="/sponsor"
+                className="inline-flex items-center rounded-full border border-black/10 bg-white/70 px-4 py-2 font-medium text-[var(--text)] no-underline backdrop-blur-sm hover:border-black/18 hover:bg-white"
+              >
+                Sponsor Avnac
+              </Link>
+            </div>
           </div>
         </div>
       </section>
