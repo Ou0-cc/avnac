@@ -105,6 +105,7 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
   }, [formatOpen]);
 
   const mult = Math.max(1, Math.min(3, Math.round(opts.multiplier)));
+  const exportMult = opts.format === "pdf" ? 1 : mult;
   const transparentAllowed = opts.format !== "jpg" && opts.format !== "pdf";
   const chooseFormat = (format: ExportImageFormat) => {
     setOpts((p) => ({
@@ -231,28 +232,32 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
             </div>
 
             <div className="rounded-2xl border border-black/[0.06] bg-white p-3">
-              <div className="mb-2.5 flex items-center justify-between gap-3">
-                <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
-                  Scale
-                </span>
-                <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[12px] font-medium tabular-nums text-neutral-700">
-                  {mult}x
-                </span>
-              </div>
-              <EditorRangeSlider
-                min={1}
-                max={3}
-                step={1}
-                value={mult}
-                onChange={(n) =>
-                  setOpts((p) => ({ ...p, multiplier: Math.round(n) }))
-                }
-                aria-label="Image export scale"
-                aria-valuemin={1}
-                aria-valuemax={3}
-                aria-valuenow={mult}
-                trackClassName={transparentAllowed ? "w-full" : "w-full"}
-              />
+              {opts.format !== "pdf" ? (
+                <>
+                  <div className="mb-2.5 flex items-center justify-between gap-3">
+                    <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                      Scale
+                    </span>
+                    <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[12px] font-medium tabular-nums text-neutral-700">
+                      {mult}x
+                    </span>
+                  </div>
+                  <EditorRangeSlider
+                    min={1}
+                    max={3}
+                    step={1}
+                    value={mult}
+                    onChange={(n) =>
+                      setOpts((p) => ({ ...p, multiplier: Math.round(n) }))
+                    }
+                    aria-label="Image export scale"
+                    aria-valuemin={1}
+                    aria-valuemax={3}
+                    aria-valuenow={mult}
+                    trackClassName={transparentAllowed ? "w-full" : "w-full"}
+                  />
+                </>
+              ) : null}
               {transparentAllowed ? (
                 <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-neutral-800">
                   <input
@@ -291,7 +296,8 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-black/[0.02] px-3 py-2.5">
               <div className="min-w-0">
                 <div className="text-[12px] font-medium text-neutral-700">
-                  {formatMeta[opts.format].label} • {mult}x
+                  {formatMeta[opts.format].label}
+                  {opts.format !== "pdf" ? ` • ${mult}x` : ""}
                   {transparentAllowed && opts.transparent
                     ? " • Transparent"
                     : ""}
@@ -306,7 +312,7 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
                 onClick={() => {
                   const finalOpts = {
                     ...opts,
-                    multiplier: mult,
+                    multiplier: exportMult,
                     transparent: transparentAllowed ? opts.transparent : false,
                   };
                   posthog.capture("image_exported", {
