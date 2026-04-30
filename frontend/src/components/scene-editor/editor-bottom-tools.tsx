@@ -25,6 +25,14 @@ function toolbarIconBtn(disabled?: boolean) {
   return base
 }
 
+function toolbarSplitBtn(disabled?: boolean, opts?: { wide?: boolean }) {
+  const base = opts?.wide
+    ? 'flex h-8 min-w-[2.5rem] shrink-0 items-center justify-center rounded-full px-2 text-neutral-600 outline-none transition-colors hover:bg-black/[0.06]'
+    : 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-600 outline-none transition-colors hover:bg-black/[0.06]'
+  if (disabled) return `${base} pointer-events-none cursor-not-allowed opacity-35`
+  return base
+}
+
 export function EditorBottomTools({
   addShapeFromKind,
   addText,
@@ -80,12 +88,12 @@ export function EditorBottomTools({
         >
           <div
             ref={shapeToolSplitRef}
-            className="relative flex items-stretch rounded-full border border-black/[0.06] bg-black/[0.02]"
+            className="relative flex items-center gap-0.5 rounded-full border border-black/[0.06] bg-black/[0.02] p-0.5"
           >
             <button
               type="button"
               disabled={!ready}
-              className={`${toolbarIconBtn(!ready)} rounded-l-lg rounded-r-none border-0`}
+              className={toolbarSplitBtn(!ready, { wide: true })}
               onClick={() => addShapeFromKind(shapesQuickAddKind === 'generic' ? 'rect' : shapesQuickAddKind)}
               aria-label="Add shape"
               title="Add shape"
@@ -99,7 +107,7 @@ export function EditorBottomTools({
             <button
               type="button"
               disabled={!ready}
-              className={`${toolbarIconBtn(!ready)} rounded-l-none rounded-r-full border-0 border-l border-black/[0.06]`}
+              className={toolbarSplitBtn(!ready)}
               onClick={() => setShapesPopoverOpen((open) => !open)}
               aria-expanded={shapesPopoverOpen}
               aria-haspopup="menu"
