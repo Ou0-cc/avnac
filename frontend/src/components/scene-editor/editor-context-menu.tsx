@@ -15,6 +15,7 @@ export type EditorContextMenuState = {
   sceneX: number
   sceneY: number
   hasSelection: boolean
+  pageId: string | null
   showPageActions: boolean
   locked: boolean
 }
@@ -35,15 +36,15 @@ export function EditorContextMenu({
   onPaste,
   onToggleLock,
 }: {
-  onAddPage: () => void
+  onAddPage: (afterPageId?: string) => void
   canDeletePage: boolean
   contextMenu: EditorContextMenuState | null
   onClose: () => void
   onCopy: () => void
   onDelete: () => void
-  onDeletePage: () => void
+  onDeletePage: (pageId?: string) => void
   onDuplicate: () => void
-  onDuplicatePage: () => void
+  onDuplicatePage: (sourcePageId?: string) => void
   onPaste: (point: { x: number; y: number }) => void
   onToggleLock: () => void
 }) {
@@ -122,7 +123,7 @@ export function EditorContextMenu({
             role="menuitem"
             className={contextMenuButtonClass}
             onClick={() => {
-              onDuplicatePage()
+              onDuplicatePage(contextMenu.pageId ?? undefined)
               onClose()
             }}
           >
@@ -134,7 +135,7 @@ export function EditorContextMenu({
             role="menuitem"
             className={contextMenuButtonClass}
             onClick={() => {
-              onAddPage()
+              onAddPage(contextMenu.pageId ?? undefined)
               onClose()
             }}
           >
@@ -147,7 +148,7 @@ export function EditorContextMenu({
               role="menuitem"
               className={contextMenuButtonClass}
               onClick={() => {
-                onDeletePage()
+                onDeletePage(contextMenu.pageId ?? undefined)
                 onClose()
               }}
             >
