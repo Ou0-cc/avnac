@@ -154,6 +154,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked group' : undefined}
@@ -183,6 +184,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked image' : undefined}
@@ -213,6 +215,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked vector board' : undefined}
@@ -242,6 +245,7 @@ export function SceneObjectView({
               }
             : style
         }
+        data-avnac-scene-object
         onPointerDown={
           isEditing ? undefined : (e) => onObjectPointerDown(e, obj)
         }
@@ -313,6 +317,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked shape' : undefined}
@@ -343,6 +348,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
       >
@@ -386,6 +392,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
       >
@@ -410,6 +417,7 @@ export function SceneObjectView({
     return (
       <div
         style={style}
+        data-avnac-scene-object
         onPointerDown={(e) => onObjectPointerDown(e, obj)}
         {...hoverProps}
       >
@@ -453,6 +461,7 @@ export function SceneObjectView({
   return (
     <div
       style={style}
+      data-avnac-scene-object
       onPointerDown={(e) => onObjectPointerDown(e, obj)}
       {...hoverProps}
     >
