@@ -4,7 +4,6 @@ import {
   Delete02Icon,
   LayerAddIcon,
 } from '@hugeicons/core-free-icons'
-import { AnimatePresence, motion } from 'motion/react'
 import { useMemo } from 'react'
 
 import {
@@ -29,6 +28,9 @@ const EMPTY_ALIGN_STATE: Record<CanvasAlignKind, boolean> = {
   centerV: false,
   bottom: false,
 }
+
+const PAGE_CONTROLS_HEIGHT = 40
+const PAGE_STACK_GAP = 48
 
 function CanvasPageControls({
   artboardWidth,
@@ -124,6 +126,7 @@ export function CanvasStage() {
   const {
     backgroundActive,
     backgroundHovered,
+    deletingPageIds,
     editingSelectedText,
     elementToolbarAlignAlready,
     elementToolbarCanAlignElements,
@@ -163,36 +166,36 @@ export function CanvasStage() {
 
   return (
     <div className="flex min-h-full w-max min-w-full flex-col items-start px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-4">
-      <div className="relative z-0 mx-auto my-auto flex flex-col gap-12">
-        <AnimatePresence initial={false}>
-          {pages.map((page) => {
+      <div className="relative z-0 mx-auto my-auto flex flex-col">
+        {pages.map((page) => {
           const isActive = page.id === doc.activePageId
+          const isDeleting = deletingPageIds.includes(page.id)
+          const isLastPage = pages[pages.length - 1]?.id === page.id
           const pageW = page.artboard.width
           const pageH = page.artboard.height
           const pageObjects = page.objects
+          const pageSlotHeight =
+            pageH * scale + PAGE_CONTROLS_HEIGHT + (isLastPage ? 0 : PAGE_STACK_GAP)
 
           return (
-            <motion.div
+            <div
               key={page.id}
               className="relative inline-block"
               data-avnac-page-id={page.id}
-              style={{ originX: 0.5, originY: 0 }}
-              initial={{ opacity: 0, y: 24, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{
-                opacity: 0,
-                y: -28,
-                scale: 0.965,
-                filter: 'blur(6px)',
-                transition: {
-                  duration: 0.22,
-                  ease: [0.4, 0, 0.2, 1],
-                },
-              }}
-              transition={{
-                opacity: { duration: 0.18, ease: 'easeOut' },
-                y: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
-                scale: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+              style={{
+                height: isDeleting ? 0 : pageSlotHeight,
+                opacity: isDeleting ? 0 : 1,
+                overflow: isDeleting ? 'hidden' : 'visible',
+                pointerEvents: isDeleting ? 'none' : undefined,
+                transform: isDeleting
+                  ? 'translateX(-72px) scale(0.985)'
+                  : 'translateY(0) scale(1)',
+                transformOrigin: 'center left',
+                filter: isDeleting ? 'blur(8px)' : 'blur(0px)',
+                transition: isDeleting
+                  ? 'height 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out, transform 240ms cubic-bezier(0.4, 0, 0.2, 1), filter 220ms cubic-bezier(0.4, 0, 0.2, 1)'
+                  : 'none',
+                willChange: isDeleting ? 'height, opacity, transform, filter' : undefined,
               }}
             >
               <CanvasPageControls
@@ -342,10 +345,9 @@ export function CanvasStage() {
                   ) : null}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )
         })}
-        </AnimatePresence>
       </div>
     </div>
   )
