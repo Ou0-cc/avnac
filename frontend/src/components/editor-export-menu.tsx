@@ -8,12 +8,13 @@ import { floatingToolbarPopoverMenuClass } from "./floating-toolbar-shell";
 
 export type PngExportCrop = "none" | "selection" | "content";
 
-export type ExportImageFormat = "png" | "jpg" | "webp";
+export type ExportImageFormat = "png" | "jpg" | "webp" | "pdf";
 
 export type ExportImageOptions = {
   format: ExportImageFormat;
   multiplier: number;
   transparent: boolean;
+  flattenPdf?: boolean;
   crop?: PngExportCrop;
 };
 
@@ -47,6 +48,10 @@ const formatMeta: Record<ExportImageFormat, { label: string; note: string }> = {
   webp: {
     label: "WebP",
     note: "Modern compression with transparency support",
+  },
+  pdf: {
+    label: "PDF",
+    note: "One document with every page included",
   },
 };
 
@@ -100,12 +105,12 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
   }, [formatOpen]);
 
   const mult = Math.max(1, Math.min(3, Math.round(opts.multiplier)));
-  const transparentAllowed = opts.format !== "jpg";
+  const transparentAllowed = opts.format !== "jpg" && opts.format !== "pdf";
   const chooseFormat = (format: ExportImageFormat) => {
     setOpts((p) => ({
       ...p,
       format,
-      transparent: format === "jpg" ? false : p.transparent,
+      transparent: format === "jpg" || format === "pdf" ? false : p.transparent,
     }));
     setFormatOpen(false);
   };
@@ -185,7 +190,7 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
                     aria-label="Export format"
                     className="absolute inset-x-0 top-full z-[120] mt-1.5 overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.16)]"
                   >
-                    {(["png", "jpg", "webp"] as const).map((format) => {
+                    {(["png", "jpg", "webp", "pdf"] as const).map((format) => {
                       const active = opts.format === format;
                       return (
                         <button
@@ -262,6 +267,25 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
                   Transparent background
                 </label>
               ) : null}
+              {opts.format === "pdf" ? (
+                <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-[13px] text-neutral-800">
+                  <input
+                    type="checkbox"
+                    checked={!!opts.flattenPdf}
+                    onChange={(e) =>
+                      setOpts((p) => ({ ...p, flattenPdf: e.target.checked }))
+                    }
+                    className="mt-0.5 size-4 shrink-0 rounded border border-black/20"
+                    style={{ accentColor: "var(--accent)" }}
+                  />
+                  <span>
+                    <span className="block font-medium">Flatten PDF</span>
+                    <span className="block text-[11.5px] leading-relaxed text-neutral-500">
+                      Export each page as one image.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-black/[0.02] px-3 py-2.5">
@@ -270,6 +294,9 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
                   {formatMeta[opts.format].label} • {mult}x
                   {transparentAllowed && opts.transparent
                     ? " • Transparent"
+                    : ""}
+                  {opts.format === "pdf" && opts.flattenPdf
+                    ? " • Flattened"
                     : ""}
                 </div>
               </div>
@@ -286,6 +313,7 @@ export default function EditorExportMenu({ disabled, onExport }: Props) {
                     format: finalOpts.format,
                     scale: finalOpts.multiplier,
                     transparent: finalOpts.transparent,
+                    flattenPdf: finalOpts.flattenPdf,
                   });
                   onExport(finalOpts);
                   setOpen(false);
