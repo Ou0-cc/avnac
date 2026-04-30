@@ -1,3 +1,8 @@
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  Copy01Icon,
+  LayerAddIcon,
+} from '@hugeicons/core-free-icons'
 import { useMemo } from 'react'
 
 import {
@@ -23,14 +28,54 @@ const EMPTY_ALIGN_STATE: Record<CanvasAlignKind, boolean> = {
   bottom: false,
 }
 
+function CanvasPageControls({
+  onAddPage,
+  onDuplicatePage,
+}: {
+  onAddPage: () => void
+  onDuplicatePage: () => void
+}) {
+  const buttonClass =
+    'flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-neutral-700 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900'
+
+  return (
+    <div
+      data-avnac-chrome
+      className="pointer-events-auto absolute left-0 z-30 flex items-center gap-1.5"
+      style={{ bottom: 'calc(100% + 0.25rem)' }}
+    >
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={onDuplicatePage}
+        aria-label="Duplicate page"
+        title="Duplicate page"
+      >
+        <HugeiconsIcon icon={Copy01Icon} size={18} strokeWidth={1.75} />
+      </button>
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={onAddPage}
+        aria-label="Add new page"
+        title="Add new page"
+      >
+        <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
+      </button>
+    </div>
+  )
+}
+
 export function CanvasStage() {
   const { actions, refs, state } = useCanvasStageContext()
   const {
+    addPage,
     alignElementToArtboard,
     alignSelectedElements,
     commitTextDraft,
     copyElementToClipboard,
     deleteSelection,
+    duplicatePage,
     duplicateElement,
     groupSelection,
     onArtboardPointerEnter,
@@ -129,6 +174,10 @@ export function CanvasStage() {
             boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
           }}
         >
+          <CanvasPageControls
+            onAddPage={addPage}
+            onDuplicatePage={duplicatePage}
+          />
           <div
             ref={artboardInnerRef}
             className="absolute left-0 top-0 select-none overflow-visible rounded-sm bg-white"
