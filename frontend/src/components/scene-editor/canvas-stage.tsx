@@ -4,7 +4,7 @@ import {
   Delete02Icon,
   LayerAddIcon,
 } from '@hugeicons/core-free-icons'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   getObjectRotatedBounds,
@@ -90,6 +90,7 @@ function CanvasPageControls({
 }
 
 export function CanvasStage() {
+  const [hoveredPageId, setHoveredPageId] = useState<string | null>(null)
   const { actions, refs, state } = useCanvasStageContext()
   const {
     activatePage,
@@ -171,6 +172,7 @@ export function CanvasStage() {
           const isActive = page.id === doc.activePageId
           const isDeleting = deletingPageIds.includes(page.id)
           const isLastPage = pages[pages.length - 1]?.id === page.id
+          const showPageHover = hoveredPageId === page.id && !isDeleting
           const pageW = page.artboard.width
           const pageH = page.artboard.height
           const pageObjects = page.objects
@@ -182,6 +184,10 @@ export function CanvasStage() {
               key={page.id}
               className="relative inline-block"
               data-avnac-page-id={page.id}
+              onPointerEnter={() => setHoveredPageId(page.id)}
+              onPointerLeave={() => {
+                setHoveredPageId((current) => (current === page.id ? null : current))
+              }}
               style={{
                 height: isDeleting ? 0 : pageSlotHeight,
                 opacity: isDeleting ? 0 : 1,
@@ -344,6 +350,15 @@ export function CanvasStage() {
                     </>
                   ) : null}
                 </div>
+                {showPageHover ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 z-[24] rounded-sm"
+                    style={{
+                      boxShadow:
+                        '0 0 0 1.5px var(--accent), 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent)',
+                    }}
+                  />
+                ) : null}
               </div>
             </div>
           )
