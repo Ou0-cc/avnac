@@ -1,6 +1,7 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Copy01Icon,
+  Delete02Icon,
   LayerAddIcon,
 } from '@hugeicons/core-free-icons'
 import { useMemo } from 'react'
@@ -30,12 +31,16 @@ const EMPTY_ALIGN_STATE: Record<CanvasAlignKind, boolean> = {
 
 function CanvasPageControls({
   artboardWidth,
+  pageId,
   onAddPage,
+  onDeletePage,
   onDuplicatePage,
 }: {
   artboardWidth: number
-  onAddPage: () => void
-  onDuplicatePage: () => void
+  pageId: string
+  onAddPage: (afterPageId?: string) => void
+  onDeletePage: (pageId?: string) => void
+  onDuplicatePage: (sourcePageId?: string) => void
 }) {
   const buttonClass =
     'flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-neutral-700 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900'
@@ -49,7 +54,7 @@ function CanvasPageControls({
       <button
         type="button"
         className={buttonClass}
-        onClick={onDuplicatePage}
+        onClick={() => onDuplicatePage(pageId)}
         aria-label="Duplicate page"
         title="Duplicate page"
       >
@@ -58,11 +63,20 @@ function CanvasPageControls({
       <button
         type="button"
         className={buttonClass}
-        onClick={onAddPage}
+        onClick={() => onAddPage(pageId)}
         aria-label="Add new page"
         title="Add new page"
       >
         <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
+      </button>
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={() => onDeletePage(pageId)}
+        aria-label="Delete page"
+        title="Delete page"
+      >
+        <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
       </button>
     </div>
   )
@@ -71,12 +85,14 @@ function CanvasPageControls({
 export function CanvasStage() {
   const { actions, refs, state } = useCanvasStageContext()
   const {
+    activatePage,
     addPage,
     alignElementToArtboard,
     alignSelectedElements,
     commitTextDraft,
     copyElementToClipboard,
     deleteSelection,
+    deletePage,
     duplicatePage,
     duplicateElement,
     groupSelection,
@@ -121,143 +137,184 @@ export function CanvasStage() {
     textDraft,
     textEditingId,
   } = state
-  const artboard = useEditorStore((storeState) => storeState.doc.artboard)
-  const bg = useEditorStore((state) => state.doc.bg)
-  const objects = useEditorStore((state) => state.doc.objects)
+  const doc = useEditorStore((storeState) => storeState.doc)
   const selectedIds = useEditorStore((state) => state.selectedIds)
   const hoveredId = useEditorStore((state) => state.hoveredId)
   const { boardDocs } = useVectorBoardControlsContext()
-  const artboardW = artboard.width
-  const artboardH = artboard.height
+  const pages = doc.pages.length > 0 ? doc.pages : []
+  const activePage = pages.find((page) => page.id === doc.activePageId) ?? pages[0]
+  const activeObjects = activePage?.objects ?? doc.objects
+  const artboardW = activePage?.artboard.width ?? doc.artboard.width
+  const artboardH = activePage?.artboard.height ?? doc.artboard.height
   const hoveredObject = useMemo(
     () =>
       hoveredId
-        ? objects.find((obj) => obj.id === hoveredId && obj.visible) ?? null
+        ? activeObjects.find((obj) => obj.id === hoveredId && obj.visible) ?? null
         : null,
-    [hoveredId, objects],
+    [hoveredId, activeObjects],
   )
+  const noop = () => {}
 
   return (
     <div className="flex min-h-full w-max min-w-full flex-col items-start px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-4">
-      <div className="relative z-0 mx-auto my-auto inline-block">
-        {ready && hasObjectSelected && elementToolbarLayout && !editingSelectedText ? (
-          <CanvasElementToolbar
-            ref={elementToolbarRef}
-            style={{
-              left: elementToolbarLayout.left,
-              top: elementToolbarLayout.top,
-            }}
-            placement={elementToolbarLayout.placement}
-            viewportRef={viewportRef}
-            locked={elementToolbarLockedDisplay}
-            onDuplicate={duplicateElement}
-            onToggleLock={toggleElementLock}
-            onDelete={deleteSelection}
-            onCopy={copyElementToClipboard}
-            onPaste={pasteFromClipboard}
-            onAlign={alignElementToArtboard}
-            alignAlreadySatisfied={elementToolbarAlignAlready ?? EMPTY_ALIGN_STATE}
-            canGroup={elementToolbarCanGroup}
-            canAlignElements={elementToolbarCanAlignElements}
-            canUngroup={elementToolbarCanUngroup}
-            onGroup={groupSelection}
-            onAlignElements={alignSelectedElements}
-            onUngroup={ungroupSelection}
-          />
-        ) : null}
+      <div className="relative z-0 mx-auto my-auto flex flex-col gap-12">
+        {pages.map((page) => {
+          const isActive = page.id === doc.activePageId
+          const pageW = page.artboard.width
+          const pageH = page.artboard.height
+          const pageObjects = page.objects
 
-        <CanvasPageControls
-          artboardWidth={artboardW * scale}
-          onAddPage={addPage}
-          onDuplicatePage={duplicatePage}
-        />
-        <div
-          ref={artboardOuterRef}
-          className="relative rounded-sm"
-          style={{
-            width: artboardW * scale,
-            height: artboardH * scale,
-            lineHeight: 0,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-          }}
-        >
-          <div
-            ref={artboardInnerRef}
-            className="absolute left-0 top-0 select-none overflow-visible rounded-sm bg-white"
-            style={{
-              width: artboardW,
-              height: artboardH,
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
-              background: bg.type === 'solid' ? bg.color : bg.css,
-            }}
-            onPointerEnter={onArtboardPointerEnter}
-            onPointerMove={onArtboardPointerMove}
-            onPointerDown={onViewportPointerDown}
-            onPointerLeave={onArtboardPointerLeave}
-          >
-            <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
-              {objects
-                .filter((obj) => obj.visible)
-                .map((obj) => (
-                  <SceneObjectView
-                    key={obj.id}
-                    obj={obj}
-                    vectorBoardDocs={boardDocs}
-                    textEditingId={textEditingId}
-                    textDraft={textDraft}
-                    onObjectPointerDown={onObjectPointerDown}
-                    onObjectHoverChange={onObjectHoverChange}
-                    onTextDoubleClick={onTextDoubleClick}
-                    onTextDraftChange={onTextDraftChange}
-                    onTextDraftCommit={commitTextDraft}
+          return (
+            <div key={page.id} className="relative inline-block">
+              <CanvasPageControls
+                artboardWidth={pageW * scale}
+                pageId={page.id}
+                onAddPage={addPage}
+                onDeletePage={deletePage}
+                onDuplicatePage={duplicatePage}
+              />
+              <div
+                ref={isActive ? artboardOuterRef : undefined}
+                className="relative rounded-sm"
+                style={{
+                  width: pageW * scale,
+                  height: pageH * scale,
+                  lineHeight: 0,
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+                }}
+                onPointerDown={
+                  isActive
+                    ? undefined
+                    : (e) => {
+                        if (e.button !== 0) return
+                        activatePage(page.id)
+                      }
+                }
+              >
+                {isActive &&
+                ready &&
+                hasObjectSelected &&
+                elementToolbarLayout &&
+                !editingSelectedText ? (
+                  <CanvasElementToolbar
+                    ref={elementToolbarRef}
+                    style={{
+                      left: elementToolbarLayout.left,
+                      top: elementToolbarLayout.top,
+                    }}
+                    placement={elementToolbarLayout.placement}
+                    viewportRef={viewportRef}
+                    locked={elementToolbarLockedDisplay}
+                    onDuplicate={duplicateElement}
+                    onToggleLock={toggleElementLock}
+                    onDelete={deleteSelection}
+                    onCopy={copyElementToClipboard}
+                    onPaste={pasteFromClipboard}
+                    onAlign={alignElementToArtboard}
+                    alignAlreadySatisfied={
+                      elementToolbarAlignAlready ?? EMPTY_ALIGN_STATE
+                    }
+                    canGroup={elementToolbarCanGroup}
+                    canAlignElements={elementToolbarCanAlignElements}
+                    canUngroup={elementToolbarCanUngroup}
+                    onGroup={groupSelection}
+                    onAlignElements={alignSelectedElements}
+                    onUngroup={ungroupSelection}
                   />
-                ))}
+                ) : null}
+
+                <div
+                  ref={isActive ? artboardInnerRef : undefined}
+                  className="absolute left-0 top-0 select-none overflow-visible rounded-sm bg-white"
+                  style={{
+                    width: pageW,
+                    height: pageH,
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top left',
+                    background: page.bg.type === 'solid' ? page.bg.color : page.bg.css,
+                  }}
+                  onPointerEnter={isActive ? onArtboardPointerEnter : undefined}
+                  onPointerMove={isActive ? onArtboardPointerMove : undefined}
+                  onPointerDown={isActive ? onViewportPointerDown : undefined}
+                  onPointerLeave={isActive ? onArtboardPointerLeave : undefined}
+                >
+                  <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
+                    {pageObjects
+                      .filter((obj) => obj.visible)
+                      .map((obj) => (
+                        <SceneObjectView
+                          key={obj.id}
+                          obj={obj}
+                          vectorBoardDocs={boardDocs}
+                          textEditingId={isActive ? textEditingId : null}
+                          textDraft={isActive ? textDraft : ''}
+                          onObjectPointerDown={isActive ? onObjectPointerDown : noop}
+                          onObjectHoverChange={
+                            isActive ? onObjectHoverChange : noop
+                          }
+                          onTextDoubleClick={isActive ? onTextDoubleClick : noop}
+                          onTextDraftChange={isActive ? onTextDraftChange : noop}
+                          onTextDraftCommit={isActive ? commitTextDraft : noop}
+                        />
+                      ))}
+                  </div>
+                  {isActive ? (
+                    <>
+                      <SnapGuidesOverlay
+                        guides={snapGuides}
+                        scale={scale}
+                        artboardW={pageW}
+                        artboardH={pageH}
+                      />
+                      {hoveredObject &&
+                      selectedIds.length === 0 &&
+                      textEditingId == null ? (
+                        <SelectionBoundsOverlay
+                          bounds={getObjectRotatedBounds(hoveredObject)}
+                          scale={scale}
+                        />
+                      ) : null}
+                      {!hoveredObject &&
+                      selectedIds.length === 0 &&
+                      textEditingId == null &&
+                      (backgroundActive || backgroundHovered) ? (
+                        <SelectionBoundsOverlay
+                          bounds={{ left: 0, top: 0, width: pageW, height: pageH }}
+                          scale={scale}
+                        />
+                      ) : null}
+                      {selectedObjects.length > 1 && selectionBounds ? (
+                        <SelectionBoundsOverlay
+                          bounds={selectionBounds}
+                          scale={scale}
+                        />
+                      ) : null}
+                      {marqueeRect &&
+                      (marqueeRect.width > 0 || marqueeRect.height > 0) ? (
+                        <SelectionBoundsOverlay
+                          bounds={marqueeRect}
+                          scale={scale}
+                          dashed
+                          fill
+                        />
+                      ) : null}
+                      {selectedSingle &&
+                      !selectedSingle.locked &&
+                      !editingSelectedText ? (
+                        <SelectionOverlay
+                          object={selectedSingle}
+                          scale={scale}
+                          onHandlePointerDown={onSelectionHandlePointerDown}
+                          onRotatePointerDown={onRotateHandlePointerDown}
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            <SnapGuidesOverlay
-              guides={snapGuides}
-              scale={scale}
-              artboardW={artboardW}
-              artboardH={artboardH}
-            />
-            {hoveredObject &&
-            selectedIds.length === 0 &&
-            textEditingId == null ? (
-              <SelectionBoundsOverlay
-                bounds={getObjectRotatedBounds(hoveredObject)}
-                scale={scale}
-              />
-            ) : null}
-            {!hoveredObject &&
-            selectedIds.length === 0 &&
-            textEditingId == null &&
-            (backgroundActive || backgroundHovered) ? (
-              <SelectionBoundsOverlay
-                bounds={{ left: 0, top: 0, width: artboardW, height: artboardH }}
-                scale={scale}
-              />
-            ) : null}
-            {selectedObjects.length > 1 && selectionBounds ? (
-              <SelectionBoundsOverlay bounds={selectionBounds} scale={scale} />
-            ) : null}
-            {marqueeRect && (marqueeRect.width > 0 || marqueeRect.height > 0) ? (
-              <SelectionBoundsOverlay
-                bounds={marqueeRect}
-                scale={scale}
-                dashed
-                fill
-              />
-            ) : null}
-            {selectedSingle && !selectedSingle.locked && !editingSelectedText ? (
-              <SelectionOverlay
-                object={selectedSingle}
-                scale={scale}
-                onHandlePointerDown={onSelectionHandlePointerDown}
-                onRotatePointerDown={onRotateHandlePointerDown}
-              />
-            ) : null}
-          </div>
-        </div>
+          )
+        })}
       </div>
     </div>
   )
