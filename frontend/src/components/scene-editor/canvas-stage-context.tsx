@@ -65,6 +65,7 @@ export type CanvasStageContextValue = {
   state: {
     backgroundActive: boolean
     backgroundHovered: boolean
+    deletingPageIds: string[]
     editingSelectedText: boolean
     elementToolbarAlignAlready: Record<CanvasAlignKind, boolean> | null
     elementToolbarCanAlignElements: boolean
