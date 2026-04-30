@@ -1,8 +1,3 @@
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Copy01Icon,
-  LayerAddIcon,
-} from '@hugeicons/core-free-icons'
 import {
   forwardRef,
   useCallback,
@@ -144,7 +139,7 @@ const DEFAULT_ARTBOARD_W = 4000
 const DEFAULT_ARTBOARD_H = 4000
 const ARTBOARD_ALIGN_PAD = 32
 const ZOOM_MIN_PCT = 5
-const ZOOM_MAX_PCT = 100
+const ZOOM_MAX_PCT = 500
 const FIT_PADDING = 48
 const CLIPBOARD_PASTE_OFFSET = 24
 const DEFAULT_FILL: BgValue = { type: 'solid', color: '#262626' }
@@ -163,56 +158,6 @@ type SceneEditorProps = {
   persistDisplayName?: string
   initialArtboardWidth?: number
   initialArtboardHeight?: number
-}
-
-type PageControlsLayout = {
-  left: number
-  top: number
-}
-
-function PageControlsOverlay({
-  layout,
-  onAddPage,
-  onDuplicatePage,
-}: {
-  layout: PageControlsLayout | null
-  onAddPage: () => void
-  onDuplicatePage: () => void
-}) {
-  if (!layout) return null
-
-  const buttonClass =
-    'flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-neutral-700 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900'
-
-  return (
-    <div
-      data-avnac-chrome
-      className="pointer-events-auto absolute z-30 flex items-center gap-1.5"
-      style={{
-        left: layout.left,
-        top: layout.top,
-      }}
-    >
-      <button
-        type="button"
-        className={buttonClass}
-        onClick={onDuplicatePage}
-        aria-label="Duplicate page"
-        title="Duplicate page"
-      >
-        <HugeiconsIcon icon={Copy01Icon} size={18} strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        className={buttonClass}
-        onClick={onAddPage}
-        aria-label="Add new page"
-        title="Add new page"
-      >
-        <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
-      </button>
-    </div>
-  )
 }
 
 function artboardAlignAlreadySatisfied(
@@ -250,6 +195,10 @@ function computeTransformDimensionUi(
   }
 }
 
+function clampZoomPercentValue(pct: number) {
+  return Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, pct))
+}
+
 
 const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
   function SceneEditor(
@@ -270,6 +219,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     persistDisplayNameRef.current = persistDisplayName?.trim() || 'Untitled'
 
     const viewportRef = useRef<HTMLDivElement>(null)
+    const editorChromeRef = useRef<HTMLDivElement>(null)
     const artboardOuterRef = useRef<HTMLDivElement>(null)
     const artboardInnerRef = useRef<HTMLDivElement>(null)
     const elementToolbarRef = useRef<HTMLDivElement>(null)
@@ -277,6 +227,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const shapeToolSplitRef = useRef<HTMLDivElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
     const zoomUserAdjustedRef = useRef(false)
+    const zoomPercentRef = useRef<number | null>(null)
+    const gestureStartZoomRef = useRef<number | null>(null)
     const historyRef = useRef<AvnacDocument[]>([])
     const historyIndexRef = useRef(-1)
     const applyingHistoryRef = useRef(false)
@@ -332,8 +284,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const [, setSelectionRev] = useState(0)
     const [transformDimensionUi, setTransformDimensionUi] =
       useState<TransformDimensionUi | null>(null)
-    const [pageControlsLayout, setPageControlsLayout] =
-      useState<PageControlsLayout | null>(null)
 
     const backgroundPopoverAnchorRef = useRef<HTMLDivElement>(null)
     const backgroundPopoverPanelRef = useRef<HTMLDivElement>(null)
@@ -370,6 +320,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     }, [bgPopoverOpen])
 
     const scale = (zoomPercent ?? 100) / 100
+    zoomPercentRef.current = zoomPercent
     const artboardW = doc.artboard.width
     const artboardH = doc.artboard.height
     const selectedObjects = useMemo(
@@ -380,13 +331,12 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const editingSelectedText =
       selectedSingle?.type === 'text' && textEditingId === selectedSingle.id
     const hasObjectSelected = selectedObjects.length > 0
-    const canvasBodySelected = ready && !hasObjectSelected
 
     useEffect(() => {
-      if (!canvasBodySelected && bgPopoverOpen) {
+      if ((!backgroundActive || hasObjectSelected) && bgPopoverOpen) {
         setBgPopoverOpen(false)
       }
-    }, [bgPopoverOpen, canvasBodySelected])
+    }, [backgroundActive, bgPopoverOpen, hasObjectSelected])
 
     const fitZoom = useCallback(() => {
       const viewport = viewportRef.current
@@ -402,6 +352,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           ),
         ),
       )
+      zoomPercentRef.current = pct
       setZoomPercent(pct)
     }, [artboardH, artboardW])
 
@@ -409,51 +360,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       if (zoomPercent === null || zoomUserAdjustedRef.current) return
       fitZoom()
     }, [artboardW, artboardH, fitZoom, zoomPercent])
-
-    useLayoutEffect(() => {
-      if (!ready) {
-        setPageControlsLayout(null)
-        return
-      }
-      const viewport = viewportRef.current
-      const artboard = artboardOuterRef.current
-      if (!viewport || !artboard) return
-
-      let rafId = 0
-
-      const update = () => {
-        rafId = 0
-        const viewportRect = viewport.getBoundingClientRect()
-        const artboardRect = artboard.getBoundingClientRect()
-        const next = {
-          left: Math.max(8, Math.round(artboardRect.left - viewportRect.left)),
-          top: Math.max(8, Math.round(artboardRect.top - viewportRect.top - 40)),
-        }
-        setPageControlsLayout((prev) =>
-          prev && prev.left === next.left && prev.top === next.top ? prev : next,
-        )
-      }
-
-      const queueUpdate = () => {
-        if (rafId) return
-        rafId = window.requestAnimationFrame(update)
-      }
-
-      queueUpdate()
-      viewport.addEventListener('scroll', queueUpdate, { passive: true })
-      window.addEventListener('resize', queueUpdate)
-
-      const resizeObserver = new ResizeObserver(queueUpdate)
-      resizeObserver.observe(viewport)
-      resizeObserver.observe(artboard)
-
-      return () => {
-        if (rafId) window.cancelAnimationFrame(rafId)
-        viewport.removeEventListener('scroll', queueUpdate)
-        window.removeEventListener('resize', queueUpdate)
-        resizeObserver.disconnect()
-      }
-    }, [artboardH, artboardW, ready, scale])
 
     useSceneDocumentLifecycle({
       applyingHistoryRef,
@@ -1421,13 +1327,162 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const onZoomSliderChange = useCallback((pct: number) => {
       zoomUserAdjustedRef.current = true
-      setZoomPercent(Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, Math.round(pct))))
+      const nextPct = clampZoomPercentValue(pct)
+      zoomPercentRef.current = nextPct
+      setZoomPercent(nextPct)
     }, [])
 
     const onZoomFitRequest = useCallback(() => {
       zoomUserAdjustedRef.current = false
       fitZoom()
     }, [fitZoom])
+
+    const zoomAroundClientPoint = useCallback(
+      (clientX: number, clientY: number, nextPctRaw: number) => {
+        const currentPct = zoomPercentRef.current
+        const viewport = viewportRef.current
+        const artboard = artboardOuterRef.current
+        if (currentPct == null || !viewport || !artboard) return
+
+        const nextPct = clampZoomPercentValue(nextPctRaw)
+        if (nextPct === currentPct) return
+
+        const prevScale = currentPct / 100
+        const nextScale = nextPct / 100
+        const artboardRect = artboard.getBoundingClientRect()
+        const sceneX = (clientX - artboardRect.left) / prevScale
+        const sceneY = (clientY - artboardRect.top) / prevScale
+
+        zoomPercentRef.current = nextPct
+        setZoomPercent(nextPct)
+
+        window.requestAnimationFrame(() => {
+          const nextArtboardRect = artboard.getBoundingClientRect()
+          const viewportRect = viewport.getBoundingClientRect()
+          const targetLeft = clientX - viewportRect.left
+          const targetTop = clientY - viewportRect.top
+          const nextPointLeft =
+            nextArtboardRect.left - viewportRect.left + sceneX * nextScale
+          const nextPointTop =
+            nextArtboardRect.top - viewportRect.top + sceneY * nextScale
+
+          viewport.scrollLeft += nextPointLeft - targetLeft
+          viewport.scrollTop += nextPointTop - targetTop
+        })
+      },
+      [],
+    )
+
+    useEffect(() => {
+      if (!ready) return
+      const root = editorChromeRef.current
+      const viewport = viewportRef.current
+      if (!viewport) return
+
+      type ClientGestureEvent = Event & {
+        clientX?: number
+        clientY?: number
+        target: EventTarget | null
+      }
+
+      type GestureLikeEvent = ClientGestureEvent & {
+        scale: number
+        preventDefault: () => void
+      }
+
+      const eventIsWithinEditor = (event: ClientGestureEvent) => {
+        const targetNode = event.target
+        if (targetNode instanceof Node) {
+          if (viewport.contains(targetNode)) return true
+          if (root?.contains(targetNode)) return true
+        }
+        if (
+          typeof event.clientX !== 'number' ||
+          typeof event.clientY !== 'number'
+        ) {
+          return false
+        }
+        const hit = document.elementFromPoint(event.clientX, event.clientY)
+        return !!hit && (viewport.contains(hit) || !!root?.contains(hit))
+      }
+
+      const eventPoint = (event: ClientGestureEvent) => {
+        if (
+          typeof event.clientX === 'number' &&
+          typeof event.clientY === 'number'
+        ) {
+          return { x: event.clientX, y: event.clientY }
+        }
+        const rect = viewport.getBoundingClientRect()
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        }
+      }
+
+      const onNativeWheel = (event: WheelEvent) => {
+        if (!event.ctrlKey || !eventIsWithinEditor(event as ClientGestureEvent)) return
+        event.preventDefault()
+        event.stopPropagation()
+        zoomUserAdjustedRef.current = true
+        const currentPct = zoomPercentRef.current
+        if (currentPct == null) return
+        const point = eventPoint(event as ClientGestureEvent)
+        zoomAroundClientPoint(
+          point.x,
+          point.y,
+          currentPct * Math.exp(-event.deltaY * 0.006),
+        )
+      }
+
+      const onGestureStart = (event: Event) => {
+        const e = event as GestureLikeEvent
+        if (!eventIsWithinEditor(e)) return
+        if (zoomPercentRef.current == null) return
+        gestureStartZoomRef.current = zoomPercentRef.current
+        zoomUserAdjustedRef.current = true
+        e.preventDefault()
+        e.stopPropagation()
+      }
+
+      const onGestureChange = (event: Event) => {
+        const e = event as GestureLikeEvent
+        if (!eventIsWithinEditor(e)) return
+        const startPct = gestureStartZoomRef.current ?? zoomPercentRef.current
+        if (startPct == null) return
+        zoomUserAdjustedRef.current = true
+        e.preventDefault()
+        e.stopPropagation()
+        const point = eventPoint(e)
+        zoomAroundClientPoint(point.x, point.y, startPct * e.scale)
+      }
+
+      const onGestureEnd = () => {
+        gestureStartZoomRef.current = null
+      }
+
+      window.addEventListener('wheel', onNativeWheel, {
+        passive: false,
+        capture: true,
+      })
+      window.addEventListener('gesturestart', onGestureStart as EventListener, {
+        passive: false,
+        capture: true,
+      })
+      window.addEventListener('gesturechange', onGestureChange as EventListener, {
+        passive: false,
+        capture: true,
+      })
+      window.addEventListener('gestureend', onGestureEnd as EventListener, true)
+
+      return () => {
+        gestureStartZoomRef.current = null
+        window.removeEventListener('wheel', onNativeWheel, true)
+        window.removeEventListener('gesturestart', onGestureStart as EventListener, true)
+        window.removeEventListener('gesturechange', onGestureChange as EventListener, true)
+        window.removeEventListener('gestureend', onGestureEnd as EventListener, true)
+      }
+    }, [ready, zoomAroundClientPoint])
 
     const commitTextDraft = useCallback(() => {
       if (!textEditingId) return
@@ -1984,10 +2039,10 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         viewportRef,
       },
       state: {
+        backgroundActive,
         backgroundPopoverOpenUpward,
         backgroundPopoverShiftX,
         bgPopoverOpen,
-        canvasBodySelected,
         elementToolbarLockedDisplay,
         hasObjectSelected,
         imageCornerToolbar,
@@ -2065,7 +2120,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     return (
       <EditorStoreProvider store={editorStore}>
         <VectorBoardControlsProvider value={vectorBoardControls}>
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={editorChromeRef} className="relative flex min-h-0 flex-1 flex-col">
           <input
             ref={imageInputRef}
             type="file"
@@ -2092,7 +2147,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
         <div
           ref={viewportRef}
-          className="relative flex min-h-0 flex-1 flex-col overflow-auto rounded-2xl bg-[var(--surface-subtle)]"
+          className="relative flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain rounded-2xl bg-[var(--surface-subtle)]"
           onContextMenu={ready ? onViewportContextMenu : undefined}
           onDragOver={ready ? onViewportDragOver : undefined}
           onDrop={ready ? onViewportDrop : undefined}
@@ -2101,11 +2156,6 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           <CanvasStageProvider value={canvasStageValue}>
             <CanvasStage />
           </CanvasStageProvider>
-          <PageControlsOverlay
-            layout={pageControlsLayout}
-            onAddPage={addPage}
-            onDuplicatePage={duplicatePage}
-          />
         </div>
 
         <EditorContextMenu
