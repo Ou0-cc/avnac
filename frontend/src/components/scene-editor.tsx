@@ -39,6 +39,7 @@ import {
   setObjectStrokeWidth,
   ungroupSceneObject,
   type AvnacDocument,
+  type AvnacPage,
   type SceneArrow,
   type SceneImage,
   type SceneLine,
@@ -202,6 +203,14 @@ function clampZoomPercentValue(pct: number) {
   return Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, pct))
 }
 
+function renumberPages(pages: AvnacPage[]): AvnacPage[] {
+  return pages.map((page, index) =>
+    createAvnacPage({
+      ...page,
+      name: `Page ${index + 1}`,
+    }),
+  )
+}
 
 const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
   function SceneEditor(
@@ -1939,11 +1948,12 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         const nextPage = createEmptyAvnacPage(
           sourcePage?.artboard.width ?? prev.artboard.width,
           sourcePage?.artboard.height ?? prev.artboard.height,
-          `Page ${prev.pages.length + 1}`,
+          `Page ${insertAt + 1}`,
         )
         const pages = [...prev.pages]
         pages.splice(insertAt, 0, nextPage)
-        return activateAvnacPage({ ...prev, pages }, nextPage.id)
+        const nextPages = renumberPages(pages)
+        return activateAvnacPage({ ...prev, pages: nextPages }, nextPage.id)
       })
       clearPageInteractionState()
     }, [clearPageInteractionState, commitTextDraft, setDoc])
@@ -1968,7 +1978,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
                 objects: prev.objects,
               })
         const duplicatedPage = createAvnacPage({
-          name: `${activePage.name || `Page ${activeIndex + 1}`} copy`,
+          name: `Page ${activeIndex + 2}`,
           artboard: activePage.artboard,
           bg: activePage.bg,
           objects: activePage.objects.map((obj) => renameWithFreshIds(obj)),
@@ -1979,7 +1989,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           0,
           duplicatedPage,
         )
-        return activateAvnacPage({ ...prev, pages }, duplicatedPage.id)
+        const nextPages = renumberPages(pages)
+        return activateAvnacPage({ ...prev, pages: nextPages }, duplicatedPage.id)
       })
       clearPageInteractionState()
     }, [clearPageInteractionState, commitTextDraft, setDoc])
@@ -1990,32 +2001,29 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         const targetIndex = pageId
           ? prev.pages.findIndex((page) => page.id === pageId)
           : prev.pages.findIndex((page) => page.id === prev.activePageId)
-        const targetPage =
-          targetIndex >= 0
-            ? prev.pages[targetIndex]
-            : createAvnacPage({
-                name: 'Page 1',
-                artboard: prev.artboard,
-                bg: prev.bg,
-                objects: prev.objects,
-              })
+        const targetPage = targetIndex >= 0 ? prev.pages[targetIndex] : null
+
+        if (!targetPage) return prev
 
         if (prev.pages.length <= 1) {
           const blankPage = createEmptyAvnacPage(
             targetPage.artboard.width,
             targetPage.artboard.height,
-            targetPage.name || 'Page 1',
+            'Page 1',
           )
           return activateAvnacPage({ ...prev, pages: [blankPage] }, blankPage.id)
         }
 
-        const pages = prev.pages.filter((page) => page.id !== targetPage.id)
-        const fallbackPage = pages[Math.min(targetIndex, pages.length - 1)] ?? pages[0]
+        const pages = [...prev.pages]
+        pages.splice(targetIndex, 1)
+        const nextPages = renumberPages(pages)
+        const fallbackPage =
+          nextPages[Math.min(targetIndex, nextPages.length - 1)] ?? nextPages[0]
         const nextActivePageId =
           targetPage.id === prev.activePageId
             ? fallbackPage.id
             : prev.activePageId
-        return activateAvnacPage({ ...prev, pages }, nextActivePageId)
+        return activateAvnacPage({ ...prev, pages: nextPages }, nextActivePageId)
       })
       clearPageInteractionState()
     }, [clearPageInteractionState, commitTextDraft, setDoc])
@@ -2276,6 +2284,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
         <EditorContextMenu
           onAddPage={addPage}
+          canDeletePage={doc.pages.length > 1}
           contextMenu={contextMenu}
           onClose={closeContextMenu}
           onCopy={() => void copyElementToClipboard()}
