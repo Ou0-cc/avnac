@@ -228,6 +228,29 @@ function setTextFont(ctx: CanvasRenderingContext2D, obj: SceneText) {
   ctx.font = `${obj.fontStyle} ${weight} ${obj.fontSize}px "${obj.fontFamily}", sans-serif`
 }
 
+function cssLineBoxBaselineOffset(
+  ctx: CanvasRenderingContext2D,
+  obj: SceneText,
+  lineHeight: number,
+): number {
+  const metrics = ctx.measureText('Mg') as TextMetrics & {
+    fontBoundingBoxAscent?: number
+    fontBoundingBoxDescent?: number
+  }
+  const ascent =
+    typeof metrics.fontBoundingBoxAscent === 'number' &&
+    Number.isFinite(metrics.fontBoundingBoxAscent)
+      ? metrics.fontBoundingBoxAscent
+      : metrics.actualBoundingBoxAscent || obj.fontSize * 0.8
+  const descent =
+    typeof metrics.fontBoundingBoxDescent === 'number' &&
+    Number.isFinite(metrics.fontBoundingBoxDescent)
+      ? metrics.fontBoundingBoxDescent
+      : metrics.actualBoundingBoxDescent || obj.fontSize * 0.2
+  const fontBox = Math.max(1, ascent + descent)
+  return (lineHeight - fontBox) / 2 + ascent
+}
+
 export function layoutSceneText(
   obj: SceneText,
   ctx?: CanvasRenderingContext2D | null,
@@ -290,7 +313,7 @@ export async function preloadFontsForDocument(doc: AvnacDocument): Promise<void>
 function drawTextObject(ctx: CanvasRenderingContext2D, obj: SceneText) {
   const text = layoutSceneText(obj, ctx)
   setTextFont(ctx, obj)
-  ctx.textBaseline = 'top'
+  ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = bgValueToCanvasPaint(ctx, obj.fill, obj.width, obj.height)
   ctx.strokeStyle = bgValueToCanvasPaint(ctx, obj.stroke, obj.width, obj.height)
   ctx.lineWidth = obj.strokeWidth
@@ -298,11 +321,13 @@ function drawTextObject(ctx: CanvasRenderingContext2D, obj: SceneText) {
   ctx.textAlign = textAlign
   const anchorX =
     textAlign === 'center' ? obj.width / 2 : textAlign === 'right' ? obj.width : 0
+  const baselineOffset = cssLineBoxBaselineOffset(ctx, obj, text.lineHeight)
   for (let i = 0; i < text.lines.length; i += 1) {
     const line = text.lines[i] ?? ''
     const y = i * text.lineHeight
-    if (obj.strokeWidth > 0) ctx.strokeText(line, anchorX, y)
-    ctx.fillText(line, anchorX, y)
+    const baselineY = y + baselineOffset
+    if (obj.strokeWidth > 0) ctx.strokeText(line, anchorX, baselineY)
+    ctx.fillText(line, anchorX, baselineY)
     if (obj.underline && line.length > 0) {
       const metrics = ctx.measureText(line)
       const width =
@@ -314,7 +339,7 @@ function drawTextObject(ctx: CanvasRenderingContext2D, obj: SceneText) {
           : textAlign === 'right'
             ? anchorX - width
             : anchorX
-      const underlineY = y + obj.fontSize * 1.08
+      const underlineY = baselineY + obj.fontSize * 0.12
       ctx.beginPath()
       ctx.moveTo(startX, underlineY)
       ctx.lineTo(startX + width, underlineY)
