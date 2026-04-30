@@ -31,12 +31,14 @@ const EMPTY_ALIGN_STATE: Record<CanvasAlignKind, boolean> = {
 
 function CanvasPageControls({
   artboardWidth,
+  canDeletePage,
   pageId,
   onAddPage,
   onDeletePage,
   onDuplicatePage,
 }: {
   artboardWidth: number
+  canDeletePage: boolean
   pageId: string
   onAddPage: (afterPageId?: string) => void
   onDeletePage: (pageId?: string) => void
@@ -69,15 +71,17 @@ function CanvasPageControls({
       >
         <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
       </button>
-      <button
-        type="button"
-        className={buttonClass}
-        onClick={() => onDeletePage(pageId)}
-        aria-label="Delete page"
-        title="Delete page"
-      >
-        <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
-      </button>
+      {canDeletePage ? (
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => onDeletePage(pageId)}
+          aria-label="Delete page"
+          title="Delete page"
+        >
+          <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -142,6 +146,7 @@ export function CanvasStage() {
   const hoveredId = useEditorStore((state) => state.hoveredId)
   const { boardDocs } = useVectorBoardControlsContext()
   const pages = doc.pages.length > 0 ? doc.pages : []
+  const canDeletePage = pages.length > 1
   const activePage = pages.find((page) => page.id === doc.activePageId) ?? pages[0]
   const activeObjects = activePage?.objects ?? doc.objects
   const artboardW = activePage?.artboard.width ?? doc.artboard.width
@@ -168,6 +173,7 @@ export function CanvasStage() {
             <div key={page.id} className="relative inline-block">
               <CanvasPageControls
                 artboardWidth={pageW * scale}
+                canDeletePage={canDeletePage}
                 pageId={page.id}
                 onAddPage={addPage}
                 onDeletePage={deletePage}
