@@ -21,6 +21,7 @@ Documents are keyed by the same UUID the frontend already generates in `/create?
 - `PUT /documents/:id`
 - `POST /documents/:id/claim`
 - `GET /documents` for the signed-in user's owned docs
+- `POST /media/remove-background`
 - `GET /sponsor/config`
 - `POST /sponsor/checkout`
 - `GET /sponsor/verify/:reference`
