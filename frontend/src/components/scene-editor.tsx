@@ -146,6 +146,7 @@ const ZOOM_MIN_PCT = 5
 const ZOOM_MAX_PCT = 500
 const FIT_PADDING = 48
 const CLIPBOARD_PASTE_OFFSET = 24
+const PAGE_DELETE_EXIT_MS = 240
 const DEFAULT_FILL: BgValue = { type: 'solid', color: '#262626' }
 const DEFAULT_STROKE: BgValue = { type: 'solid', color: 'transparent' }
 const DEFAULT_LINE_STROKE: BgValue = { type: 'solid', color: '#262626' }
@@ -241,6 +242,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const zoomUserAdjustedRef = useRef(false)
     const zoomPercentRef = useRef<number | null>(null)
     const gestureStartZoomRef = useRef<number | null>(null)
+    const deletePageTimersRef = useRef(new Map<string, number>())
     const historyRef = useRef<AvnacDocument[]>([])
     const historyIndexRef = useRef(-1)
     const applyingHistoryRef = useRef(false)
@@ -267,6 +269,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const setHoveredId = useStore(editorStore, (state) => state.setHoveredId)
 
     const [ready, setReady] = useState(false)
+    const [deletingPageIds, setDeletingPageIds] = useState<string[]>([])
     const [pendingPageScrollId, setPendingPageScrollId] = useState<string | null>(null)
     const [zoomPercent, setZoomPercent] = useState<number | null>(null)
     const [editorSidebarPanel, setEditorSidebarPanel] =
@@ -403,6 +406,13 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       const timer = window.setTimeout(() => setExportError(null), 4500)
       return () => window.clearTimeout(timer)
     }, [exportError])
+
+    useEffect(() => {
+      return () => {
+        deletePageTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+        deletePageTimersRef.current.clear()
+      }
+    }, [])
 
     const selectionBounds = useMemo(
       () => getSelectionBounds(selectedObjects),
@@ -2029,36 +2039,42 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const deletePage = useCallback((pageId?: string) => {
       commitTextDraft()
-      setDoc((prev) => {
-        const targetIndex = pageId
-          ? prev.pages.findIndex((page) => page.id === pageId)
-          : prev.pages.findIndex((page) => page.id === prev.activePageId)
-        const targetPage = targetIndex >= 0 ? prev.pages[targetIndex] : null
+      const currentDoc = editorStore.getState().doc
+      const targetPageId = pageId ?? currentDoc.activePageId
+      if (!targetPageId) return
+      if (deletePageTimersRef.current.has(targetPageId)) return
+      if (currentDoc.pages.length <= 1) return
+      if (!currentDoc.pages.some((page) => page.id === targetPageId)) return
 
-        if (!targetPage) return prev
-
-        if (prev.pages.length <= 1) {
-          const blankPage = createEmptyAvnacPage(
-            targetPage.artboard.width,
-            targetPage.artboard.height,
-            'Page 1',
-          )
-          return activateAvnacPage({ ...prev, pages: [blankPage] }, blankPage.id)
-        }
-
-        const pages = [...prev.pages]
-        pages.splice(targetIndex, 1)
-        const nextPages = renumberPages(pages)
-        const fallbackPage =
-          nextPages[Math.min(targetIndex, nextPages.length - 1)] ?? nextPages[0]
-        const nextActivePageId =
-          targetPage.id === prev.activePageId
-            ? fallbackPage.id
-            : prev.activePageId
-        return activateAvnacPage({ ...prev, pages: nextPages }, nextActivePageId)
-      })
       clearPageInteractionState()
-    }, [clearPageInteractionState, commitTextDraft, setDoc])
+      setDeletingPageIds((current) =>
+        current.includes(targetPageId) ? current : [...current, targetPageId],
+      )
+
+      const timer = window.setTimeout(() => {
+        deletePageTimersRef.current.delete(targetPageId)
+        setDoc((prev) => {
+          const targetIndex = prev.pages.findIndex((page) => page.id === targetPageId)
+          const targetPage = targetIndex >= 0 ? prev.pages[targetIndex] : null
+          if (!targetPage) return prev
+          if (prev.pages.length <= 1) return prev
+
+          const pages = [...prev.pages]
+          pages.splice(targetIndex, 1)
+          const nextPages = renumberPages(pages)
+          const fallbackPage =
+            nextPages[Math.min(targetIndex, nextPages.length - 1)] ?? nextPages[0]
+          const nextActivePageId =
+            targetPage.id === prev.activePageId
+              ? fallbackPage.id
+              : prev.activePageId
+          return activateAvnacPage({ ...prev, pages: nextPages }, nextActivePageId)
+        })
+        setDeletingPageIds((current) => current.filter((id) => id !== targetPageId))
+      }, PAGE_DELETE_EXIT_MS)
+
+      deletePageTimersRef.current.set(targetPageId, timer)
+    }, [clearPageInteractionState, commitTextDraft, editorStore, setDoc])
 
     useLayoutEffect(() => {
       if (!pendingPageScrollId) return
@@ -2279,6 +2295,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       state: {
         backgroundActive,
         backgroundHovered,
+        deletingPageIds,
         editingSelectedText,
         elementToolbarAlignAlready,
         elementToolbarCanAlignElements,
