@@ -27,6 +27,7 @@ export function EditorContextMenu({
   onClose,
   onCopy,
   onDelete,
+  onDeletePage,
   onDuplicate,
   onDuplicatePage,
   onPaste,
@@ -37,6 +38,7 @@ export function EditorContextMenu({
   onClose: () => void
   onCopy: () => void
   onDelete: () => void
+  onDeletePage: () => void
   onDuplicate: () => void
   onDuplicatePage: () => void
   onPaste: (point: { x: number; y: number }) => void
@@ -133,6 +135,18 @@ export function EditorContextMenu({
       >
         <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
         Add new page
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={contextMenuButtonClass}
+        onClick={() => {
+          onDeletePage()
+          onClose()
+        }}
+      >
+        <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
+        Delete page
       </button>
       {contextMenu.hasSelection ? (
         <>
