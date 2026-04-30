@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { zipSync } from 'fflate'
 import { useStore } from 'zustand'
 import {
   AVNAC_DOC_VERSION,
@@ -202,6 +203,31 @@ function computeTransformDimensionUi(
 
 function clampZoomPercentValue(pct: number) {
   return Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, pct))
+}
+
+function safeExportFileBaseName(name: string) {
+  const cleaned = name
+    .trim()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+  return cleaned || 'avnac'
+}
+
+function pageExportDocument(doc: AvnacDocument, page: AvnacPage): AvnacDocument {
+  return {
+    ...doc,
+    artboard: { ...page.artboard },
+    bg: page.bg,
+    objects: page.objects,
+    activePageId: page.id,
+  }
+}
+
+async function dataUrlToBytes(url: string): Promise<Uint8Array> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Could not read exported image.')
+  return new Uint8Array(await res.arrayBuffer())
 }
 
 function renumberPages(pages: AvnacPage[]): AvnacPage[] {
@@ -1322,14 +1348,53 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       (opts?: ExportImageOptions) => {
         void (async () => {
           try {
-            const url = await renderAvnacDocumentToDataUrl(doc, vectorBoardDocs, {
-              format: opts?.format ?? 'png',
-              multiplier: opts?.multiplier ?? 1,
-              transparent: opts?.transparent ?? false,
+            const format = opts?.format ?? 'png'
+            const multiplier = opts?.multiplier ?? 1
+            const transparent = opts?.transparent ?? false
+            const fileBase = safeExportFileBaseName(
+              persistDisplayNameRef.current || 'avnac',
+            )
+            const exportPages = doc.pages.length > 0 ? doc.pages : []
+
+            if (exportPages.length > 1) {
+              const files: Record<string, Uint8Array> = {}
+              for (const [index, page] of exportPages.entries()) {
+                const pageDoc = pageExportDocument(doc, page)
+                const url = await renderAvnacDocumentToDataUrl(
+                  pageDoc,
+                  vectorBoardDocs,
+                  {
+                    format,
+                    multiplier,
+                    transparent,
+                  },
+                )
+                const pageNumber = String(index + 1).padStart(2, '0')
+                files[`${fileBase}-page-${pageNumber}.${format}`] =
+                  await dataUrlToBytes(url)
+              }
+              const zipBytes = zipSync(files, { level: 0 })
+              const blob = new Blob([zipBytes], { type: 'application/zip' })
+              const zipUrl = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = zipUrl
+              a.download = `${fileBase}.zip`
+              a.click()
+              window.setTimeout(() => URL.revokeObjectURL(zipUrl), 0)
+              return
+            }
+
+            const pageDoc = exportPages[0]
+              ? pageExportDocument(doc, exportPages[0])
+              : doc
+            const url = await renderAvnacDocumentToDataUrl(pageDoc, vectorBoardDocs, {
+              format,
+              multiplier,
+              transparent,
             })
             const a = document.createElement('a')
             a.href = url
-            a.download = `${persistDisplayNameRef.current || 'avnac'}.${opts?.format ?? 'png'}`
+            a.download = `${fileBase}.${format}`
             a.click()
           } catch (error) {
             console.error('[avnac] image export failed', error)
