@@ -23,6 +23,7 @@ const contextMenuButtonClass =
 
 export function EditorContextMenu({
   onAddPage,
+  canDeletePage,
   contextMenu,
   onClose,
   onCopy,
@@ -34,6 +35,7 @@ export function EditorContextMenu({
   onToggleLock,
 }: {
   onAddPage: () => void
+  canDeletePage: boolean
   contextMenu: EditorContextMenuState | null
   onClose: () => void
   onCopy: () => void
@@ -136,18 +138,20 @@ export function EditorContextMenu({
         <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
         Add new page
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        className={contextMenuButtonClass}
-        onClick={() => {
-          onDeletePage()
-          onClose()
-        }}
-      >
-        <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
-        Delete page
-      </button>
+      {canDeletePage ? (
+        <button
+          type="button"
+          role="menuitem"
+          className={contextMenuButtonClass}
+          onClick={() => {
+            onDeletePage()
+            onClose()
+          }}
+        >
+          <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
+          Delete page
+        </button>
+      ) : null}
       {contextMenu.hasSelection ? (
         <>
           <div className="my-1 h-px bg-black/[0.06]" aria-hidden />
