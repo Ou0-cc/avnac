@@ -230,6 +230,164 @@ async function dataUrlToBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer())
 }
 
+type PdfMatrix = [number, number, number, number, number, number]
+
+type SelectablePdfText = {
+  obj: SceneText
+  matrix: PdfMatrix
+}
+
+const IDENTITY_PDF_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0]
+
+function multiplyPdfMatrix(a: PdfMatrix, b: PdfMatrix): PdfMatrix {
+  return [
+    a[0] * b[0] + a[2] * b[1],
+    a[1] * b[0] + a[3] * b[1],
+    a[0] * b[2] + a[2] * b[3],
+    a[1] * b[2] + a[3] * b[3],
+    a[0] * b[4] + a[2] * b[5] + a[4],
+    a[1] * b[4] + a[3] * b[5] + a[5],
+  ]
+}
+
+function sceneObjectPdfMatrix(obj: SceneObject): PdfMatrix {
+  const radians = (obj.rotation * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  const cx = obj.x + obj.width / 2
+  const cy = obj.y + obj.height / 2
+  return [
+    cos,
+    sin,
+    -sin,
+    cos,
+    cx - cos * (obj.width / 2) + sin * (obj.height / 2),
+    cy - sin * (obj.width / 2) - cos * (obj.height / 2),
+  ]
+}
+
+function transformPdfPoint(matrix: PdfMatrix, x: number, y: number) {
+  return {
+    x: matrix[0] * x + matrix[2] * y + matrix[4],
+    y: matrix[1] * x + matrix[3] * y + matrix[5],
+  }
+}
+
+function pdfMatrixRotationDeg(matrix: PdfMatrix) {
+  return (Math.atan2(matrix[1], matrix[0]) * 180) / Math.PI
+}
+
+function collectSelectablePdfText(
+  objects: SceneObject[],
+  parentMatrix: PdfMatrix = IDENTITY_PDF_MATRIX,
+  out: SelectablePdfText[] = [],
+): SelectablePdfText[] {
+  for (const obj of objects) {
+    if (!obj.visible) continue
+    const matrix = multiplyPdfMatrix(parentMatrix, sceneObjectPdfMatrix(obj))
+    if (obj.type === 'text') {
+      if (obj.text.trim()) out.push({ obj, matrix })
+      continue
+    }
+    if (obj.type === 'group') collectSelectablePdfText(obj.children, matrix, out)
+  }
+  return out
+}
+
+function setPdfMeasureFont(ctx: CanvasRenderingContext2D, obj: SceneText) {
+  const weight = typeof obj.fontWeight === 'number' ? obj.fontWeight : obj.fontWeight
+  ctx.font = `${obj.fontStyle} ${weight} ${obj.fontSize}px "${obj.fontFamily}", sans-serif`
+}
+
+function pdfTextBaselineOffset(
+  ctx: CanvasRenderingContext2D,
+  obj: SceneText,
+  lineHeight: number,
+) {
+  setPdfMeasureFont(ctx, obj)
+  const metrics = ctx.measureText('Mg') as TextMetrics & {
+    fontBoundingBoxAscent?: number
+    fontBoundingBoxDescent?: number
+  }
+  const ascent =
+    typeof metrics.fontBoundingBoxAscent === 'number' &&
+    Number.isFinite(metrics.fontBoundingBoxAscent)
+      ? metrics.fontBoundingBoxAscent
+      : metrics.actualBoundingBoxAscent || obj.fontSize * 0.8
+  const descent =
+    typeof metrics.fontBoundingBoxDescent === 'number' &&
+    Number.isFinite(metrics.fontBoundingBoxDescent)
+      ? metrics.fontBoundingBoxDescent
+      : metrics.actualBoundingBoxDescent || obj.fontSize * 0.2
+  const fontBox = Math.max(1, ascent + descent)
+  return (lineHeight - fontBox) / 2 + ascent
+}
+
+function pdfStandardFontFamily(fontFamily: string) {
+  const lower = fontFamily.toLowerCase()
+  if (lower.includes('mono') || lower.includes('courier')) return 'courier'
+  if (lower.includes('serif') || lower.includes('times') || lower.includes('georgia')) {
+    return 'times'
+  }
+  return 'helvetica'
+}
+
+function pdfStandardFontStyle(obj: SceneText) {
+  const bold = obj.fontWeight === 'bold' ||
+    (typeof obj.fontWeight === 'number' && obj.fontWeight >= 600)
+  const italic = obj.fontStyle === 'italic'
+  if (bold && italic) return 'bolditalic'
+  if (bold) return 'bold'
+  if (italic) return 'italic'
+  return 'normal'
+}
+
+function addSelectableTextLayerToPdf(
+  pdf: {
+    setFont: (fontName: string, fontStyle?: string) => unknown
+    setFontSize: (size: number) => unknown
+    text: (
+      text: string,
+      x: number,
+      y: number,
+      options?: {
+        align?: 'left' | 'center' | 'right' | 'justify'
+        angle?: number
+        baseline?: 'alphabetic'
+        renderingMode?: 'invisible'
+      },
+    ) => unknown
+  },
+  page: AvnacPage,
+) {
+  const measure = document.createElement('canvas').getContext('2d')
+  if (!measure) return
+  for (const { obj, matrix } of collectSelectablePdfText(page.objects)) {
+    const text = layoutSceneText(obj, measure)
+    const textAlign = obj.textAlign === 'justify' ? 'left' : obj.textAlign
+    const anchorX =
+      textAlign === 'center' ? obj.width / 2 : textAlign === 'right' ? obj.width : 0
+    const baselineOffset = pdfTextBaselineOffset(measure, obj, text.lineHeight)
+    pdf.setFont(pdfStandardFontFamily(obj.fontFamily), pdfStandardFontStyle(obj))
+    pdf.setFontSize(obj.fontSize)
+    for (let i = 0; i < text.lines.length; i += 1) {
+      const line = text.lines[i] ?? ''
+      if (!line) continue
+      const point = transformPdfPoint(
+        matrix,
+        anchorX,
+        i * text.lineHeight + baselineOffset,
+      )
+      pdf.text(line, point.x, point.y, {
+        align: textAlign,
+        angle: pdfMatrixRotationDeg(matrix),
+        baseline: 'alphabetic',
+        renderingMode: 'invisible',
+      })
+    }
+  }
+}
+
 function renumberPages(pages: AvnacPage[]): AvnacPage[] {
   return pages.map((page, index) =>
     createAvnacPage({
@@ -1356,6 +1514,52 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
             )
             const exportPages = doc.pages.length > 0 ? doc.pages : []
 
+            if (format === 'pdf') {
+              const { jsPDF } = await import('jspdf')
+              const pages = exportPages.length > 0 ? exportPages : [
+                createAvnacPage({
+                  name: 'Page 1',
+                  artboard: doc.artboard,
+                  bg: doc.bg,
+                  objects: doc.objects,
+                }),
+              ]
+              let pdf: InstanceType<typeof jsPDF> | null = null
+              for (const page of pages) {
+                const pageDoc = pageExportDocument(doc, page)
+                const { width, height } = page.artboard
+                const orientation: 'landscape' | 'portrait' =
+                  width >= height ? 'landscape' : 'portrait'
+                const url = await renderAvnacDocumentToDataUrl(
+                  pageDoc,
+                  vectorBoardDocs,
+                  {
+                    format: 'png',
+                    multiplier,
+                    transparent: false,
+                  },
+                )
+
+                if (!pdf) {
+                  pdf = new jsPDF({
+                    orientation,
+                    unit: 'px',
+                    format: [width, height],
+                    hotfixes: ['px_scaling'],
+                    compress: true,
+                  })
+                } else {
+                  pdf.addPage([width, height], orientation)
+                }
+                pdf.addImage(url, 'PNG', 0, 0, width, height)
+                if (!opts?.flattenPdf) {
+                  addSelectableTextLayerToPdf(pdf, page)
+                }
+              }
+              pdf?.save(`${fileBase}.pdf`)
+              return
+            }
+
             if (exportPages.length > 1) {
               const files: Record<string, Uint8Array> = {}
               for (const [index, page] of exportPages.entries()) {
@@ -1397,7 +1601,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
             a.download = `${fileBase}.${format}`
             a.click()
           } catch (error) {
-            console.error('[avnac] image export failed', error)
+            console.error('[avnac] export failed', error)
             setExportError(
               'Could not export this canvas. Some images could not be prepared.',
             )
