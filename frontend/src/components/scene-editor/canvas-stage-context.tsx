@@ -25,11 +25,13 @@ type ElementToolbarLayout = {
 
 export type CanvasStageContextValue = {
   actions: {
+    addPage: () => void
     alignElementToArtboard: (kind: CanvasAlignKind) => void
     alignSelectedElements: (kind: CanvasAlignKind) => void
     commitTextDraft: () => void
     copyElementToClipboard: () => void
     deleteSelection: () => void
+    duplicatePage: () => void
     duplicateElement: () => void
     groupSelection: () => void
     onArtboardPointerEnter: () => void
