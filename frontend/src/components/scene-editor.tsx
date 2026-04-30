@@ -1,3 +1,8 @@
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  Copy01Icon,
+  LayerAddIcon,
+} from '@hugeicons/core-free-icons'
 import {
   forwardRef,
   useCallback,
@@ -160,6 +165,56 @@ type SceneEditorProps = {
   initialArtboardHeight?: number
 }
 
+type PageControlsLayout = {
+  left: number
+  top: number
+}
+
+function PageControlsOverlay({
+  layout,
+  onAddPage,
+  onDuplicatePage,
+}: {
+  layout: PageControlsLayout | null
+  onAddPage: () => void
+  onDuplicatePage: () => void
+}) {
+  if (!layout) return null
+
+  const buttonClass =
+    'flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-neutral-700 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900'
+
+  return (
+    <div
+      data-avnac-chrome
+      className="pointer-events-auto absolute z-30 flex items-center gap-1.5"
+      style={{
+        left: layout.left,
+        top: layout.top,
+      }}
+    >
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={onDuplicatePage}
+        aria-label="Duplicate page"
+        title="Duplicate page"
+      >
+        <HugeiconsIcon icon={Copy01Icon} size={18} strokeWidth={1.75} />
+      </button>
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={onAddPage}
+        aria-label="Add new page"
+        title="Add new page"
+      >
+        <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
+      </button>
+    </div>
+  )
+}
+
 function artboardAlignAlreadySatisfied(
   bounds: { left: number; top: number; width: number; height: number },
   boardW: number,
@@ -277,6 +332,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const [, setSelectionRev] = useState(0)
     const [transformDimensionUi, setTransformDimensionUi] =
       useState<TransformDimensionUi | null>(null)
+    const [pageControlsLayout, setPageControlsLayout] =
+      useState<PageControlsLayout | null>(null)
 
     const backgroundPopoverAnchorRef = useRef<HTMLDivElement>(null)
     const backgroundPopoverPanelRef = useRef<HTMLDivElement>(null)
@@ -352,6 +409,51 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       if (zoomPercent === null || zoomUserAdjustedRef.current) return
       fitZoom()
     }, [artboardW, artboardH, fitZoom, zoomPercent])
+
+    useLayoutEffect(() => {
+      if (!ready) {
+        setPageControlsLayout(null)
+        return
+      }
+      const viewport = viewportRef.current
+      const artboard = artboardOuterRef.current
+      if (!viewport || !artboard) return
+
+      let rafId = 0
+
+      const update = () => {
+        rafId = 0
+        const viewportRect = viewport.getBoundingClientRect()
+        const artboardRect = artboard.getBoundingClientRect()
+        const next = {
+          left: Math.max(8, Math.round(artboardRect.left - viewportRect.left)),
+          top: Math.max(8, Math.round(artboardRect.top - viewportRect.top - 40)),
+        }
+        setPageControlsLayout((prev) =>
+          prev && prev.left === next.left && prev.top === next.top ? prev : next,
+        )
+      }
+
+      const queueUpdate = () => {
+        if (rafId) return
+        rafId = window.requestAnimationFrame(update)
+      }
+
+      queueUpdate()
+      viewport.addEventListener('scroll', queueUpdate, { passive: true })
+      window.addEventListener('resize', queueUpdate)
+
+      const resizeObserver = new ResizeObserver(queueUpdate)
+      resizeObserver.observe(viewport)
+      resizeObserver.observe(artboard)
+
+      return () => {
+        if (rafId) window.cancelAnimationFrame(rafId)
+        viewport.removeEventListener('scroll', queueUpdate)
+        window.removeEventListener('resize', queueUpdate)
+        resizeObserver.disconnect()
+      }
+    }, [artboardH, artboardW, ready, scale])
 
     useSceneDocumentLifecycle({
       applyingHistoryRef,
@@ -1746,6 +1848,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     )
 
     const closeContextMenu = useCallback(() => setContextMenu(null), [])
+    const addPage = useCallback(() => {}, [])
+    const duplicatePage = useCallback(() => {}, [])
 
     useEditorKeyboardShortcuts({
       applyingHistoryRef,
@@ -1896,11 +2000,13 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const canvasStageValue: CanvasStageContextValue = {
       actions: {
+        addPage,
         alignElementToArtboard,
         alignSelectedElements,
         commitTextDraft,
         copyElementToClipboard: () => void copyElementToClipboard(),
         deleteSelection,
+        duplicatePage,
         duplicateElement: () => void duplicateElement(),
         groupSelection,
         onArtboardPointerEnter,
@@ -1995,14 +2101,21 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           <CanvasStageProvider value={canvasStageValue}>
             <CanvasStage />
           </CanvasStageProvider>
+          <PageControlsOverlay
+            layout={pageControlsLayout}
+            onAddPage={addPage}
+            onDuplicatePage={duplicatePage}
+          />
         </div>
 
         <EditorContextMenu
+          onAddPage={addPage}
           contextMenu={contextMenu}
           onClose={closeContextMenu}
           onCopy={() => void copyElementToClipboard()}
           onDelete={deleteSelection}
           onDuplicate={() => void duplicateElement()}
+          onDuplicatePage={duplicatePage}
           onPaste={(point) => void pasteFromClipboard(point)}
           onToggleLock={toggleElementLock}
         />
