@@ -29,9 +29,11 @@ const EMPTY_ALIGN_STATE: Record<CanvasAlignKind, boolean> = {
 }
 
 function CanvasPageControls({
+  artboardWidth,
   onAddPage,
   onDuplicatePage,
 }: {
+  artboardWidth: number
   onAddPage: () => void
   onDuplicatePage: () => void
 }) {
@@ -41,8 +43,8 @@ function CanvasPageControls({
   return (
     <div
       data-avnac-chrome
-      className="pointer-events-auto absolute left-0 z-30 flex items-center gap-1.5"
-      style={{ bottom: 'calc(100% + 0.25rem)' }}
+      className="pointer-events-auto mb-1 flex h-9 items-center justify-end gap-1.5"
+      style={{ width: artboardWidth }}
     >
       <button
         type="button"
@@ -136,8 +138,8 @@ export function CanvasStage() {
   )
 
   return (
-    <div className="flex min-h-min w-full flex-1 flex-col items-center justify-center px-4 pb-4 pt-0 sm:px-6 sm:pb-6 sm:pt-1">
-      <div className="relative z-0 -mt-8 inline-block sm:-mt-10">
+    <div className="flex min-h-full w-max min-w-full flex-col items-start px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-4">
+      <div className="relative z-0 mx-auto my-auto inline-block">
         {ready && hasObjectSelected && elementToolbarLayout && !editingSelectedText ? (
           <CanvasElementToolbar
             ref={elementToolbarRef}
@@ -164,6 +166,11 @@ export function CanvasStage() {
           />
         ) : null}
 
+        <CanvasPageControls
+          artboardWidth={artboardW * scale}
+          onAddPage={addPage}
+          onDuplicatePage={duplicatePage}
+        />
         <div
           ref={artboardOuterRef}
           className="relative rounded-sm"
@@ -174,10 +181,6 @@ export function CanvasStage() {
             boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
           }}
         >
-          <CanvasPageControls
-            onAddPage={addPage}
-            onDuplicatePage={duplicatePage}
-          />
           <div
             ref={artboardInnerRef}
             className="absolute left-0 top-0 select-none overflow-visible rounded-sm bg-white"
