@@ -12,6 +12,13 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3001"),
   CORS_ORIGIN: z.string().default("http://localhost:3300"),
   UNSPLASH_ACCESS_KEY: z.string().min(1).optional(),
+  PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
+  PAYSTACK_CURRENCY: z
+    .string()
+    .trim()
+    .length(3, "PAYSTACK_CURRENCY must be a 3-letter code")
+    .transform((value) => value.toUpperCase())
+    .default("NGN"),
 });
 
 export const env = envSchema.parse(getRuntimeEnv());
