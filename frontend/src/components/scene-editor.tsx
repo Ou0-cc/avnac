@@ -618,73 +618,94 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           blurPct: 0,
           shadow: null,
         }
+
+        // Center the object, then step it diagonally like duplicate/paste when occupied.
+        let positioned = createCenteredObject(common)
+        const maxX = Math.max(0, artboardW - positioned.width)
+        const maxY = Math.max(0, artboardH - positioned.height)
+        const centerOccupied = () => {
+          const centerX = positioned.x + positioned.width / 2
+          const centerY = positioned.y + positioned.height / 2
+          return doc.objects.some((obj) => {
+            const center = getObjectCenter(obj)
+            return Math.abs(center.x - centerX) < 2 && Math.abs(center.y - centerY) < 2
+          })
+        }
+        while (centerOccupied() && (positioned.x < maxX || positioned.y < maxY)) {
+          positioned = {
+            ...positioned,
+            x: Math.min(maxX, positioned.x + CLIPBOARD_PASTE_OFFSET),
+            y: Math.min(maxY, positioned.y + CLIPBOARD_PASTE_OFFSET),
+          }
+        }
+
         if (kind === 'rect') {
           addObjects([
-            createCenteredObject({
-              ...common,
+            {
+              ...positioned,
               type: 'rect',
               fill: DEFAULT_FILL,
               stroke: DEFAULT_STROKE,
               strokeWidth: 0,
               cornerRadius: Math.round(perfectSize * 0.06),
-            }),
+            },
           ])
           return
         }
         if (kind === 'ellipse') {
           addObjects([
-            createCenteredObject({
-              ...common,
+            {
+              ...positioned,
               type: 'ellipse',
               fill: DEFAULT_FILL,
               stroke: DEFAULT_STROKE,
               strokeWidth: 0,
-            }),
+            },
           ])
           return
         }
         if (kind === 'polygon') {
           addObjects([
-            createCenteredObject({
-              ...common,
+            {
+              ...positioned,
               type: 'polygon',
               fill: DEFAULT_FILL,
               stroke: DEFAULT_STROKE,
               strokeWidth: 0,
               sides: 6,
-            }),
+            },
           ])
           return
         }
         if (kind === 'star') {
           addObjects([
-            createCenteredObject({
-              ...common,
+            {
+              ...positioned,
               type: 'star',
               fill: DEFAULT_FILL,
               stroke: DEFAULT_STROKE,
               strokeWidth: 0,
               points: 5,
-            }),
+            },
           ])
           return
         }
         if (kind === 'line') {
           addObjects([
-            createCenteredObject({
-              ...common,
+            {
+              ...positioned,
               type: 'line',
               stroke: DEFAULT_LINE_STROKE,
               strokeWidth: 6,
               lineStyle: 'solid',
               roundedEnds: true,
-            }),
+            },
           ])
           return
         }
         addObjects([
-          createCenteredObject({
-            ...common,
+          {
+            ...positioned,
             type: 'arrow',
             stroke: DEFAULT_LINE_STROKE,
             strokeWidth: 6,
@@ -692,12 +713,12 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
             roundedEnds: true,
             pathType: 'straight',
             headSize: 1,
-            curveBulge: Math.round(common.height * 0.4),
+            curveBulge: Math.round(positioned.height * 0.4),
             curveT: 0.5,
-          }),
+          },
         ])
       },
-      [addObjects, createCenteredObject, defaultShapeBox],
+      [addObjects, artboardH, artboardW, createCenteredObject, defaultShapeBox, doc.objects],
     )
 
     const addText = useCallback(() => {
