@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> This repository fork is not meant for public use. Please refer to the official repo and documentation for the latest version and updates.
+>
+> Do not open issues or pull requests here. For any questions or contributions, please visit the original repository.
+>
+> Although the original repository does not currently feature a LICENSE file, this fork is maintained in good faith for personal use only. All rights are reserved by the original author; this repository is for experimentation and does not imply any transfer of ownership or permission for redistribution.
+
 # Avnac
 
 Avnac is a browser-first design editor for posters, layouts, social graphics, and other canvas-based compositions.
