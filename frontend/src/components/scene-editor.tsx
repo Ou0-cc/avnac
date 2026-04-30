@@ -1386,6 +1386,27 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       [],
     )
 
+    const zoomAroundViewportCenter = useCallback((multiplier: number) => {
+      const viewport = viewportRef.current
+      const currentPct = zoomPercentRef.current
+      if (!viewport || currentPct == null) return
+      zoomUserAdjustedRef.current = true
+      const rect = viewport.getBoundingClientRect()
+      zoomAroundClientPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+        currentPct * multiplier,
+      )
+    }, [zoomAroundClientPoint])
+
+    const onZoomInRequest = useCallback(() => {
+      zoomAroundViewportCenter(1.1)
+    }, [zoomAroundViewportCenter])
+
+    const onZoomOutRequest = useCallback(() => {
+      zoomAroundViewportCenter(1 / 1.1)
+    }, [zoomAroundViewportCenter])
+
     useEffect(() => {
       if (!ready) return
       const root = editorChromeRef.current
@@ -2074,6 +2095,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       historyRef,
       nudgeSelection,
       onZoomFitRequest,
+      onZoomInRequest,
+      onZoomOutRequest,
       pasteFromClipboard,
       reorderSelectionLayers,
       setDoc,
