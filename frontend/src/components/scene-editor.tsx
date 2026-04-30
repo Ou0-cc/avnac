@@ -2176,6 +2176,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         commitTextDraft,
         copyElementToClipboard: () => void copyElementToClipboard(),
         deleteSelection,
+        deletePage,
         duplicatePage,
         duplicateElement: () => void duplicateElement(),
         groupSelection,
@@ -2279,6 +2280,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           onClose={closeContextMenu}
           onCopy={() => void copyElementToClipboard()}
           onDelete={deleteSelection}
+          onDeletePage={deletePage}
           onDuplicate={() => void duplicateElement()}
           onDuplicatePage={duplicatePage}
           onPaste={(point) => void pasteFromClipboard(point)}
