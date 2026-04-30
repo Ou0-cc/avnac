@@ -267,6 +267,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const setHoveredId = useStore(editorStore, (state) => state.setHoveredId)
 
     const [ready, setReady] = useState(false)
+    const [pendingPageScrollId, setPendingPageScrollId] = useState<string | null>(null)
     const [zoomPercent, setZoomPercent] = useState<number | null>(null)
     const [editorSidebarPanel, setEditorSidebarPanel] =
       useState<EditorSidebarPanelId | null>(null)
@@ -1901,6 +1902,9 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const onViewportContextMenu = useCallback(
       (e: ReactMouseEvent<HTMLDivElement>) => {
         e.preventDefault()
+        const targetEl = e.target as HTMLElement | null
+        const clickedObject = targetEl?.closest?.('[data-avnac-scene-object]')
+        const clickedPage = targetEl?.closest?.('[data-avnac-page-id]')
         const pt = pointerToScene(e.clientX, e.clientY)
         setContextMenu({
           x: e.clientX,
@@ -1908,6 +1912,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           sceneX: pt.x,
           sceneY: pt.y,
           hasSelection: selectedIds.length > 0,
+          showPageActions: Boolean(clickedPage) && !clickedObject,
           locked: elementToolbarLockedDisplay,
         })
       },
@@ -1935,6 +1940,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const addPage = useCallback((afterPageId?: string) => {
       commitTextDraft()
+      let nextPageId: string | null = null
       setDoc((prev) => {
         const requestedIndex = afterPageId
           ? prev.pages.findIndex((page) => page.id === afterPageId)
@@ -1953,13 +1959,16 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         const pages = [...prev.pages]
         pages.splice(insertAt, 0, nextPage)
         const nextPages = renumberPages(pages)
+        nextPageId = nextPage.id
         return activateAvnacPage({ ...prev, pages: nextPages }, nextPage.id)
       })
+      setPendingPageScrollId(nextPageId)
       clearPageInteractionState()
     }, [clearPageInteractionState, commitTextDraft, setDoc])
 
     const duplicatePage = useCallback((sourcePageId?: string) => {
       commitTextDraft()
+      let duplicatedPageId: string | null = null
       setDoc((prev) => {
         const requestedIndex = sourcePageId
           ? prev.pages.findIndex((page) => page.id === sourcePageId)
@@ -1990,8 +1999,10 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           duplicatedPage,
         )
         const nextPages = renumberPages(pages)
+        duplicatedPageId = duplicatedPage.id
         return activateAvnacPage({ ...prev, pages: nextPages }, duplicatedPage.id)
       })
+      setPendingPageScrollId(duplicatedPageId)
       clearPageInteractionState()
     }, [clearPageInteractionState, commitTextDraft, setDoc])
 
@@ -2027,6 +2038,30 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       })
       clearPageInteractionState()
     }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    useLayoutEffect(() => {
+      if (!pendingPageScrollId) return
+      const viewport = viewportRef.current
+      if (!viewport) return
+
+      const frame = window.requestAnimationFrame(() => {
+        const pageEl = viewport.querySelector<HTMLElement>(
+          `[data-avnac-page-id="${pendingPageScrollId}"]`,
+        )
+        if (pageEl) {
+          pageEl.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest',
+          })
+        }
+        setPendingPageScrollId((current) =>
+          current === pendingPageScrollId ? null : current,
+        )
+      })
+
+      return () => window.cancelAnimationFrame(frame)
+    }, [pendingPageScrollId])
 
     useEditorKeyboardShortcuts({
       applyingHistoryRef,
