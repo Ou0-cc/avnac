@@ -1,0 +1,24 @@
+services:
+  rembg:
+    build:
+      context: ./docker/rembg
+      dockerfile: Dockerfile
+    image: avnac/rembg:2.0.75
+    command:
+      - s
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7000"
+      - --log_level
+      - info
+      - --no-ui
+    ports:
+      - "7000:7000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7000/api"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
