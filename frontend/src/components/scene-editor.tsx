@@ -11,12 +11,16 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { zipSync } from 'fflate'
 import { useStore } from 'zustand'
 import {
   AVNAC_DOC_VERSION,
+  activateAvnacPage,
   cloneAvnacDocument,
   cloneSceneObject,
+  createAvnacPage,
   createEmptyAvnacDocument,
+  createEmptyAvnacPage,
   createGroupFromSelection,
   getObjectCenter,
   getObjectFill,
@@ -36,6 +40,7 @@ import {
   setObjectStrokeWidth,
   ungroupSceneObject,
   type AvnacDocument,
+  type AvnacPage,
   type SceneArrow,
   type SceneImage,
   type SceneLine,
@@ -139,9 +144,10 @@ const DEFAULT_ARTBOARD_W = 4000
 const DEFAULT_ARTBOARD_H = 4000
 const ARTBOARD_ALIGN_PAD = 32
 const ZOOM_MIN_PCT = 5
-const ZOOM_MAX_PCT = 100
+const ZOOM_MAX_PCT = 500
 const FIT_PADDING = 48
 const CLIPBOARD_PASTE_OFFSET = 24
+const PAGE_DELETE_EXIT_MS = 240
 const DEFAULT_FILL: BgValue = { type: 'solid', color: '#262626' }
 const DEFAULT_STROKE: BgValue = { type: 'solid', color: 'transparent' }
 const DEFAULT_LINE_STROKE: BgValue = { type: 'solid', color: '#262626' }
@@ -195,6 +201,201 @@ function computeTransformDimensionUi(
   }
 }
 
+function clampZoomPercentValue(pct: number) {
+  return Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, pct))
+}
+
+function safeExportFileBaseName(name: string) {
+  const cleaned = name
+    .trim()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+  return cleaned || 'avnac'
+}
+
+function pageExportDocument(doc: AvnacDocument, page: AvnacPage): AvnacDocument {
+  return {
+    ...doc,
+    artboard: { ...page.artboard },
+    bg: page.bg,
+    objects: page.objects,
+    activePageId: page.id,
+  }
+}
+
+async function dataUrlToBytes(url: string): Promise<Uint8Array> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Could not read exported image.')
+  return new Uint8Array(await res.arrayBuffer())
+}
+
+type PdfMatrix = [number, number, number, number, number, number]
+
+type SelectablePdfText = {
+  obj: SceneText
+  matrix: PdfMatrix
+}
+
+const IDENTITY_PDF_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0]
+
+function multiplyPdfMatrix(a: PdfMatrix, b: PdfMatrix): PdfMatrix {
+  return [
+    a[0] * b[0] + a[2] * b[1],
+    a[1] * b[0] + a[3] * b[1],
+    a[0] * b[2] + a[2] * b[3],
+    a[1] * b[2] + a[3] * b[3],
+    a[0] * b[4] + a[2] * b[5] + a[4],
+    a[1] * b[4] + a[3] * b[5] + a[5],
+  ]
+}
+
+function sceneObjectPdfMatrix(obj: SceneObject): PdfMatrix {
+  const radians = (obj.rotation * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  const cx = obj.x + obj.width / 2
+  const cy = obj.y + obj.height / 2
+  return [
+    cos,
+    sin,
+    -sin,
+    cos,
+    cx - cos * (obj.width / 2) + sin * (obj.height / 2),
+    cy - sin * (obj.width / 2) - cos * (obj.height / 2),
+  ]
+}
+
+function transformPdfPoint(matrix: PdfMatrix, x: number, y: number) {
+  return {
+    x: matrix[0] * x + matrix[2] * y + matrix[4],
+    y: matrix[1] * x + matrix[3] * y + matrix[5],
+  }
+}
+
+function pdfMatrixRotationDeg(matrix: PdfMatrix) {
+  return (Math.atan2(matrix[1], matrix[0]) * 180) / Math.PI
+}
+
+function collectSelectablePdfText(
+  objects: SceneObject[],
+  parentMatrix: PdfMatrix = IDENTITY_PDF_MATRIX,
+  out: SelectablePdfText[] = [],
+): SelectablePdfText[] {
+  for (const obj of objects) {
+    if (!obj.visible) continue
+    const matrix = multiplyPdfMatrix(parentMatrix, sceneObjectPdfMatrix(obj))
+    if (obj.type === 'text') {
+      if (obj.text.trim()) out.push({ obj, matrix })
+      continue
+    }
+    if (obj.type === 'group') collectSelectablePdfText(obj.children, matrix, out)
+  }
+  return out
+}
+
+function setPdfMeasureFont(ctx: CanvasRenderingContext2D, obj: SceneText) {
+  const weight = typeof obj.fontWeight === 'number' ? obj.fontWeight : obj.fontWeight
+  ctx.font = `${obj.fontStyle} ${weight} ${obj.fontSize}px "${obj.fontFamily}", sans-serif`
+}
+
+function pdfTextBaselineOffset(
+  ctx: CanvasRenderingContext2D,
+  obj: SceneText,
+  lineHeight: number,
+) {
+  setPdfMeasureFont(ctx, obj)
+  const metrics = ctx.measureText('Mg') as TextMetrics & {
+    fontBoundingBoxAscent?: number
+    fontBoundingBoxDescent?: number
+  }
+  const ascent =
+    typeof metrics.fontBoundingBoxAscent === 'number' &&
+    Number.isFinite(metrics.fontBoundingBoxAscent)
+      ? metrics.fontBoundingBoxAscent
+      : metrics.actualBoundingBoxAscent || obj.fontSize * 0.8
+  const descent =
+    typeof metrics.fontBoundingBoxDescent === 'number' &&
+    Number.isFinite(metrics.fontBoundingBoxDescent)
+      ? metrics.fontBoundingBoxDescent
+      : metrics.actualBoundingBoxDescent || obj.fontSize * 0.2
+  const fontBox = Math.max(1, ascent + descent)
+  return (lineHeight - fontBox) / 2 + ascent
+}
+
+function pdfStandardFontFamily(fontFamily: string) {
+  const lower = fontFamily.toLowerCase()
+  if (lower.includes('mono') || lower.includes('courier')) return 'courier'
+  if (lower.includes('serif') || lower.includes('times') || lower.includes('georgia')) {
+    return 'times'
+  }
+  return 'helvetica'
+}
+
+function pdfStandardFontStyle(obj: SceneText) {
+  const bold = obj.fontWeight === 'bold' ||
+    (typeof obj.fontWeight === 'number' && obj.fontWeight >= 600)
+  const italic = obj.fontStyle === 'italic'
+  if (bold && italic) return 'bolditalic'
+  if (bold) return 'bold'
+  if (italic) return 'italic'
+  return 'normal'
+}
+
+function addSelectableTextLayerToPdf(
+  pdf: {
+    setFont: (fontName: string, fontStyle?: string) => unknown
+    setFontSize: (size: number) => unknown
+    text: (
+      text: string,
+      x: number,
+      y: number,
+      options?: {
+        align?: 'left' | 'center' | 'right' | 'justify'
+        angle?: number
+        baseline?: 'alphabetic'
+        renderingMode?: 'invisible'
+      },
+    ) => unknown
+  },
+  page: AvnacPage,
+) {
+  const measure = document.createElement('canvas').getContext('2d')
+  if (!measure) return
+  for (const { obj, matrix } of collectSelectablePdfText(page.objects)) {
+    const text = layoutSceneText(obj, measure)
+    const textAlign = obj.textAlign === 'justify' ? 'left' : obj.textAlign
+    const anchorX =
+      textAlign === 'center' ? obj.width / 2 : textAlign === 'right' ? obj.width : 0
+    const baselineOffset = pdfTextBaselineOffset(measure, obj, text.lineHeight)
+    pdf.setFont(pdfStandardFontFamily(obj.fontFamily), pdfStandardFontStyle(obj))
+    pdf.setFontSize(obj.fontSize)
+    for (let i = 0; i < text.lines.length; i += 1) {
+      const line = text.lines[i] ?? ''
+      if (!line) continue
+      const point = transformPdfPoint(
+        matrix,
+        anchorX,
+        i * text.lineHeight + baselineOffset,
+      )
+      pdf.text(line, point.x, point.y, {
+        align: textAlign,
+        angle: pdfMatrixRotationDeg(matrix),
+        baseline: 'alphabetic',
+        renderingMode: 'invisible',
+      })
+    }
+  }
+}
+
+function renumberPages(pages: AvnacPage[]): AvnacPage[] {
+  return pages.map((page, index) =>
+    createAvnacPage({
+      ...page,
+      name: `Page ${index + 1}`,
+    }),
+  )
+}
 
 const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
   function SceneEditor(
@@ -215,6 +416,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     persistDisplayNameRef.current = persistDisplayName?.trim() || 'Untitled'
 
     const viewportRef = useRef<HTMLDivElement>(null)
+    const editorChromeRef = useRef<HTMLDivElement>(null)
     const artboardOuterRef = useRef<HTMLDivElement>(null)
     const artboardInnerRef = useRef<HTMLDivElement>(null)
     const elementToolbarRef = useRef<HTMLDivElement>(null)
@@ -222,6 +424,9 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const shapeToolSplitRef = useRef<HTMLDivElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
     const zoomUserAdjustedRef = useRef(false)
+    const zoomPercentRef = useRef<number | null>(null)
+    const gestureStartZoomRef = useRef<number | null>(null)
+    const deletePageTimersRef = useRef(new Map<string, number>())
     const historyRef = useRef<AvnacDocument[]>([])
     const historyIndexRef = useRef(-1)
     const applyingHistoryRef = useRef(false)
@@ -248,6 +453,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const setHoveredId = useStore(editorStore, (state) => state.setHoveredId)
 
     const [ready, setReady] = useState(false)
+    const [deletingPageIds, setDeletingPageIds] = useState<string[]>([])
+    const [pendingPageScrollId, setPendingPageScrollId] = useState<string | null>(null)
     const [zoomPercent, setZoomPercent] = useState<number | null>(null)
     const [editorSidebarPanel, setEditorSidebarPanel] =
       useState<EditorSidebarPanelId | null>(null)
@@ -313,6 +520,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     }, [bgPopoverOpen])
 
     const scale = (zoomPercent ?? 100) / 100
+    zoomPercentRef.current = zoomPercent
     const artboardW = doc.artboard.width
     const artboardH = doc.artboard.height
     const selectedObjects = useMemo(
@@ -323,13 +531,12 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const editingSelectedText =
       selectedSingle?.type === 'text' && textEditingId === selectedSingle.id
     const hasObjectSelected = selectedObjects.length > 0
-    const canvasBodySelected = ready && !hasObjectSelected
 
     useEffect(() => {
-      if (!canvasBodySelected && bgPopoverOpen) {
+      if ((!backgroundActive || hasObjectSelected) && bgPopoverOpen) {
         setBgPopoverOpen(false)
       }
-    }, [bgPopoverOpen, canvasBodySelected])
+    }, [backgroundActive, bgPopoverOpen, hasObjectSelected])
 
     const fitZoom = useCallback(() => {
       const viewport = viewportRef.current
@@ -345,6 +552,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           ),
         ),
       )
+      zoomPercentRef.current = pct
       setZoomPercent(pct)
     }, [artboardH, artboardW])
 
@@ -382,6 +590,13 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       const timer = window.setTimeout(() => setExportError(null), 4500)
       return () => window.clearTimeout(timer)
     }, [exportError])
+
+    useEffect(() => {
+      return () => {
+        deletePageTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+        deletePageTimersRef.current.clear()
+      }
+    }, [])
 
     const selectionBounds = useMemo(
       () => getSelectionBounds(selectedObjects),
@@ -1291,17 +1506,102 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       (opts?: ExportImageOptions) => {
         void (async () => {
           try {
-            const url = await renderAvnacDocumentToDataUrl(doc, vectorBoardDocs, {
-              format: opts?.format ?? 'png',
-              multiplier: opts?.multiplier ?? 1,
-              transparent: opts?.transparent ?? false,
+            const format = opts?.format ?? 'png'
+            const multiplier = opts?.multiplier ?? 1
+            const transparent = opts?.transparent ?? false
+            const fileBase = safeExportFileBaseName(
+              persistDisplayNameRef.current || 'avnac',
+            )
+            const exportPages = doc.pages.length > 0 ? doc.pages : []
+
+            if (format === 'pdf') {
+              const { jsPDF } = await import('jspdf')
+              const pages = exportPages.length > 0 ? exportPages : [
+                createAvnacPage({
+                  name: 'Page 1',
+                  artboard: doc.artboard,
+                  bg: doc.bg,
+                  objects: doc.objects,
+                }),
+              ]
+              let pdf: InstanceType<typeof jsPDF> | null = null
+              for (const page of pages) {
+                const pageDoc = pageExportDocument(doc, page)
+                const { width, height } = page.artboard
+                const orientation: 'landscape' | 'portrait' =
+                  width >= height ? 'landscape' : 'portrait'
+                const url = await renderAvnacDocumentToDataUrl(
+                  pageDoc,
+                  vectorBoardDocs,
+                  {
+                    format: 'png',
+                    multiplier,
+                    transparent: false,
+                  },
+                )
+
+                if (!pdf) {
+                  pdf = new jsPDF({
+                    orientation,
+                    unit: 'px',
+                    format: [width, height],
+                    hotfixes: ['px_scaling'],
+                    compress: true,
+                  })
+                } else {
+                  pdf.addPage([width, height], orientation)
+                }
+                pdf.addImage(url, 'PNG', 0, 0, width, height)
+                if (!opts?.flattenPdf) {
+                  addSelectableTextLayerToPdf(pdf, page)
+                }
+              }
+              pdf?.save(`${fileBase}.pdf`)
+              return
+            }
+
+            if (exportPages.length > 1) {
+              const files: Record<string, Uint8Array> = {}
+              for (const [index, page] of exportPages.entries()) {
+                const pageDoc = pageExportDocument(doc, page)
+                const url = await renderAvnacDocumentToDataUrl(
+                  pageDoc,
+                  vectorBoardDocs,
+                  {
+                    format,
+                    multiplier,
+                    transparent,
+                  },
+                )
+                const pageNumber = String(index + 1).padStart(2, '0')
+                files[`${fileBase}-page-${pageNumber}.${format}`] =
+                  await dataUrlToBytes(url)
+              }
+              const zipBytes = zipSync(files, { level: 0 })
+              const blob = new Blob([zipBytes], { type: 'application/zip' })
+              const zipUrl = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = zipUrl
+              a.download = `${fileBase}.zip`
+              a.click()
+              window.setTimeout(() => URL.revokeObjectURL(zipUrl), 0)
+              return
+            }
+
+            const pageDoc = exportPages[0]
+              ? pageExportDocument(doc, exportPages[0])
+              : doc
+            const url = await renderAvnacDocumentToDataUrl(pageDoc, vectorBoardDocs, {
+              format,
+              multiplier,
+              transparent,
             })
             const a = document.createElement('a')
             a.href = url
-            a.download = `${persistDisplayNameRef.current || 'avnac'}.${opts?.format ?? 'png'}`
+            a.download = `${fileBase}.${format}`
             a.click()
           } catch (error) {
-            console.error('[avnac] image export failed', error)
+            console.error('[avnac] export failed', error)
             setExportError(
               'Could not export this canvas. Some images could not be prepared.',
             )
@@ -1319,13 +1619,183 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const onZoomSliderChange = useCallback((pct: number) => {
       zoomUserAdjustedRef.current = true
-      setZoomPercent(Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, Math.round(pct))))
+      const nextPct = clampZoomPercentValue(pct)
+      zoomPercentRef.current = nextPct
+      setZoomPercent(nextPct)
     }, [])
 
     const onZoomFitRequest = useCallback(() => {
       zoomUserAdjustedRef.current = false
       fitZoom()
     }, [fitZoom])
+
+    const zoomAroundClientPoint = useCallback(
+      (clientX: number, clientY: number, nextPctRaw: number) => {
+        const currentPct = zoomPercentRef.current
+        const viewport = viewportRef.current
+        const artboard = artboardOuterRef.current
+        if (currentPct == null || !viewport || !artboard) return
+
+        const nextPct = clampZoomPercentValue(nextPctRaw)
+        if (nextPct === currentPct) return
+
+        const prevScale = currentPct / 100
+        const nextScale = nextPct / 100
+        const artboardRect = artboard.getBoundingClientRect()
+        const sceneX = (clientX - artboardRect.left) / prevScale
+        const sceneY = (clientY - artboardRect.top) / prevScale
+
+        zoomPercentRef.current = nextPct
+        setZoomPercent(nextPct)
+
+        window.requestAnimationFrame(() => {
+          const nextArtboardRect = artboard.getBoundingClientRect()
+          const viewportRect = viewport.getBoundingClientRect()
+          const targetLeft = clientX - viewportRect.left
+          const targetTop = clientY - viewportRect.top
+          const nextPointLeft =
+            nextArtboardRect.left - viewportRect.left + sceneX * nextScale
+          const nextPointTop =
+            nextArtboardRect.top - viewportRect.top + sceneY * nextScale
+
+          viewport.scrollLeft += nextPointLeft - targetLeft
+          viewport.scrollTop += nextPointTop - targetTop
+        })
+      },
+      [],
+    )
+
+    const zoomAroundViewportCenter = useCallback((multiplier: number) => {
+      const viewport = viewportRef.current
+      const currentPct = zoomPercentRef.current
+      if (!viewport || currentPct == null) return
+      zoomUserAdjustedRef.current = true
+      const rect = viewport.getBoundingClientRect()
+      zoomAroundClientPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+        currentPct * multiplier,
+      )
+    }, [zoomAroundClientPoint])
+
+    const onZoomInRequest = useCallback(() => {
+      zoomAroundViewportCenter(1.1)
+    }, [zoomAroundViewportCenter])
+
+    const onZoomOutRequest = useCallback(() => {
+      zoomAroundViewportCenter(1 / 1.1)
+    }, [zoomAroundViewportCenter])
+
+    useEffect(() => {
+      if (!ready) return
+      const root = editorChromeRef.current
+      const viewport = viewportRef.current
+      if (!viewport) return
+
+      type ClientGestureEvent = Event & {
+        clientX?: number
+        clientY?: number
+        target: EventTarget | null
+      }
+
+      type GestureLikeEvent = ClientGestureEvent & {
+        scale: number
+        preventDefault: () => void
+      }
+
+      const eventIsWithinEditor = (event: ClientGestureEvent) => {
+        const targetNode = event.target
+        if (targetNode instanceof Node) {
+          if (viewport.contains(targetNode)) return true
+          if (root?.contains(targetNode)) return true
+        }
+        if (
+          typeof event.clientX !== 'number' ||
+          typeof event.clientY !== 'number'
+        ) {
+          return false
+        }
+        const hit = document.elementFromPoint(event.clientX, event.clientY)
+        return !!hit && (viewport.contains(hit) || !!root?.contains(hit))
+      }
+
+      const eventPoint = (event: ClientGestureEvent) => {
+        if (
+          typeof event.clientX === 'number' &&
+          typeof event.clientY === 'number'
+        ) {
+          return { x: event.clientX, y: event.clientY }
+        }
+        const rect = viewport.getBoundingClientRect()
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        }
+      }
+
+      const onNativeWheel = (event: WheelEvent) => {
+        if (!event.ctrlKey || !eventIsWithinEditor(event as ClientGestureEvent)) return
+        event.preventDefault()
+        event.stopPropagation()
+        zoomUserAdjustedRef.current = true
+        const currentPct = zoomPercentRef.current
+        if (currentPct == null) return
+        const point = eventPoint(event as ClientGestureEvent)
+        zoomAroundClientPoint(
+          point.x,
+          point.y,
+          currentPct * Math.exp(-event.deltaY * 0.006),
+        )
+      }
+
+      const onGestureStart = (event: Event) => {
+        const e = event as GestureLikeEvent
+        if (!eventIsWithinEditor(e)) return
+        if (zoomPercentRef.current == null) return
+        gestureStartZoomRef.current = zoomPercentRef.current
+        zoomUserAdjustedRef.current = true
+        e.preventDefault()
+        e.stopPropagation()
+      }
+
+      const onGestureChange = (event: Event) => {
+        const e = event as GestureLikeEvent
+        if (!eventIsWithinEditor(e)) return
+        const startPct = gestureStartZoomRef.current ?? zoomPercentRef.current
+        if (startPct == null) return
+        zoomUserAdjustedRef.current = true
+        e.preventDefault()
+        e.stopPropagation()
+        const point = eventPoint(e)
+        zoomAroundClientPoint(point.x, point.y, startPct * e.scale)
+      }
+
+      const onGestureEnd = () => {
+        gestureStartZoomRef.current = null
+      }
+
+      window.addEventListener('wheel', onNativeWheel, {
+        passive: false,
+        capture: true,
+      })
+      window.addEventListener('gesturestart', onGestureStart as EventListener, {
+        passive: false,
+        capture: true,
+      })
+      window.addEventListener('gesturechange', onGestureChange as EventListener, {
+        passive: false,
+        capture: true,
+      })
+      window.addEventListener('gestureend', onGestureEnd as EventListener, true)
+
+      return () => {
+        gestureStartZoomRef.current = null
+        window.removeEventListener('wheel', onNativeWheel, true)
+        window.removeEventListener('gesturestart', onGestureStart as EventListener, true)
+        window.removeEventListener('gesturechange', onGestureChange as EventListener, true)
+        window.removeEventListener('gestureend', onGestureEnd as EventListener, true)
+      }
+    }, [ready, zoomAroundClientPoint])
 
     const commitTextDraft = useCallback(() => {
       if (!textEditingId) return
@@ -1732,6 +2202,10 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     const onViewportContextMenu = useCallback(
       (e: ReactMouseEvent<HTMLDivElement>) => {
         e.preventDefault()
+        const targetEl = e.target as HTMLElement | null
+        const clickedObject = targetEl?.closest?.('[data-avnac-scene-object]')
+        const clickedPage = targetEl?.closest?.('[data-avnac-page-id]')
+        const clickedPageId = clickedPage?.getAttribute('data-avnac-page-id') ?? null
         const pt = pointerToScene(e.clientX, e.clientY)
         setContextMenu({
           x: e.clientX,
@@ -1739,6 +2213,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           sceneX: pt.x,
           sceneY: pt.y,
           hasSelection: selectedIds.length > 0,
+          pageId: clickedPageId,
+          showPageActions: Boolean(clickedPage) && !clickedObject,
           locked: elementToolbarLockedDisplay,
         })
       },
@@ -1746,6 +2222,166 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     )
 
     const closeContextMenu = useCallback(() => setContextMenu(null), [])
+    const clearPageInteractionState = useCallback(() => {
+      setSelectedIds([])
+      setHoveredId(null)
+      setTextEditingId(null)
+      setBackgroundHovered(false)
+      setBackgroundActive(false)
+      setMarqueeRect(null)
+      setContextMenu(null)
+    }, [setHoveredId, setSelectedIds])
+
+    const activatePage = useCallback((pageId: string) => {
+      commitTextDraft()
+      setDoc((prev) =>
+        prev.activePageId === pageId ? prev : activateAvnacPage(prev, pageId),
+      )
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    const addPage = useCallback((afterPageId?: string) => {
+      commitTextDraft()
+      let nextPageId: string | null = null
+      setDoc((prev) => {
+        const requestedIndex = afterPageId
+          ? prev.pages.findIndex((page) => page.id === afterPageId)
+          : -1
+        const activeIndex =
+          requestedIndex >= 0
+            ? requestedIndex
+            : prev.pages.findIndex((page) => page.id === prev.activePageId)
+        const sourcePage = activeIndex >= 0 ? prev.pages[activeIndex] : null
+        const insertAt = activeIndex >= 0 ? activeIndex + 1 : prev.pages.length
+        const nextPage = createEmptyAvnacPage(
+          sourcePage?.artboard.width ?? prev.artboard.width,
+          sourcePage?.artboard.height ?? prev.artboard.height,
+          `Page ${insertAt + 1}`,
+        )
+        const pages = [...prev.pages]
+        pages.splice(insertAt, 0, nextPage)
+        const nextPages = renumberPages(pages)
+        nextPageId = nextPage.id
+        return activateAvnacPage({ ...prev, pages: nextPages }, nextPage.id)
+      })
+      setPendingPageScrollId(nextPageId)
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    const duplicatePage = useCallback((sourcePageId?: string) => {
+      commitTextDraft()
+      let duplicatedPageId: string | null = null
+      setDoc((prev) => {
+        const requestedIndex = sourcePageId
+          ? prev.pages.findIndex((page) => page.id === sourcePageId)
+          : -1
+        const activeIndex =
+          requestedIndex >= 0
+            ? requestedIndex
+            : prev.pages.findIndex((page) => page.id === prev.activePageId)
+        const activePage =
+          activeIndex >= 0
+            ? prev.pages[activeIndex]
+            : createAvnacPage({
+                name: 'Page 1',
+                artboard: prev.artboard,
+                bg: prev.bg,
+                objects: prev.objects,
+              })
+        const duplicatedPage = createAvnacPage({
+          name: `Page ${activeIndex + 2}`,
+          artboard: activePage.artboard,
+          bg: activePage.bg,
+          objects: activePage.objects.map((obj) => renameWithFreshIds(obj)),
+        })
+        const pages = [...prev.pages]
+        pages.splice(
+          activeIndex >= 0 ? activeIndex + 1 : pages.length,
+          0,
+          duplicatedPage,
+        )
+        const nextPages = renumberPages(pages)
+        duplicatedPageId = duplicatedPage.id
+        return activateAvnacPage({ ...prev, pages: nextPages }, duplicatedPage.id)
+      })
+      setPendingPageScrollId(duplicatedPageId)
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    const deletePage = useCallback((pageId?: string) => {
+      commitTextDraft()
+      const currentDoc = editorStore.getState().doc
+      const targetPageId = pageId ?? currentDoc.activePageId
+      if (!targetPageId) return
+      if (deletePageTimersRef.current.has(targetPageId)) return
+      if (currentDoc.pages.length <= 1) return
+      if (!currentDoc.pages.some((page) => page.id === targetPageId)) return
+
+      clearPageInteractionState()
+      setDeletingPageIds((current) =>
+        current.includes(targetPageId) ? current : [...current, targetPageId],
+      )
+
+      const timer = window.setTimeout(() => {
+        deletePageTimersRef.current.delete(targetPageId)
+        setDoc((prev) => {
+          const targetIndex = prev.pages.findIndex((page) => page.id === targetPageId)
+          const targetPage = targetIndex >= 0 ? prev.pages[targetIndex] : null
+          if (!targetPage) return prev
+          if (prev.pages.length <= 1) return prev
+
+          const pages = [...prev.pages]
+          pages.splice(targetIndex, 1)
+          const nextPages = renumberPages(pages)
+          const fallbackPage =
+            nextPages[Math.min(targetIndex, nextPages.length - 1)] ?? nextPages[0]
+          const nextActivePageId =
+            targetPage.id === prev.activePageId
+              ? fallbackPage.id
+              : prev.activePageId
+          const activePage =
+            nextPages.find((page) => page.id === nextActivePageId) ?? fallbackPage
+          return activateAvnacPage(
+            {
+              ...prev,
+              artboard: { ...activePage.artboard },
+              bg: activePage.bg,
+              objects: activePage.objects,
+              activePageId: nextActivePageId,
+              pages: nextPages,
+            },
+            nextActivePageId,
+          )
+        })
+        setDeletingPageIds((current) => current.filter((id) => id !== targetPageId))
+      }, PAGE_DELETE_EXIT_MS)
+
+      deletePageTimersRef.current.set(targetPageId, timer)
+    }, [clearPageInteractionState, commitTextDraft, editorStore, setDoc])
+
+    useLayoutEffect(() => {
+      if (!pendingPageScrollId) return
+      const viewport = viewportRef.current
+      if (!viewport) return
+
+      const frame = window.requestAnimationFrame(() => {
+        const pageEl = viewport.querySelector<HTMLElement>(
+          `[data-avnac-page-id="${pendingPageScrollId}"]`,
+        )
+        if (pageEl) {
+          pageEl.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest',
+          })
+        }
+        setPendingPageScrollId((current) =>
+          current === pendingPageScrollId ? null : current,
+        )
+      })
+
+      return () => window.cancelAnimationFrame(frame)
+    }, [pendingPageScrollId])
 
     useEditorKeyboardShortcuts({
       applyingHistoryRef,
@@ -1758,6 +2394,8 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       historyRef,
       nudgeSelection,
       onZoomFitRequest,
+      onZoomInRequest,
+      onZoomOutRequest,
       pasteFromClipboard,
       reorderSelectionLayers,
       setDoc,
@@ -1880,10 +2518,10 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         viewportRef,
       },
       state: {
+        backgroundActive,
         backgroundPopoverOpenUpward,
         backgroundPopoverShiftX,
         bgPopoverOpen,
-        canvasBodySelected,
         elementToolbarLockedDisplay,
         hasObjectSelected,
         imageCornerToolbar,
@@ -1896,11 +2534,15 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const canvasStageValue: CanvasStageContextValue = {
       actions: {
+        activatePage,
+        addPage,
         alignElementToArtboard,
         alignSelectedElements,
         commitTextDraft,
         copyElementToClipboard: () => void copyElementToClipboard(),
         deleteSelection,
+        deletePage,
+        duplicatePage,
         duplicateElement: () => void duplicateElement(),
         groupSelection,
         onArtboardPointerEnter,
@@ -1936,6 +2578,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
       state: {
         backgroundActive,
         backgroundHovered,
+        deletingPageIds,
         editingSelectedText,
         elementToolbarAlignAlready,
         elementToolbarCanAlignElements,
@@ -1959,7 +2602,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     return (
       <EditorStoreProvider store={editorStore}>
         <VectorBoardControlsProvider value={vectorBoardControls}>
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={editorChromeRef} className="relative flex min-h-0 flex-1 flex-col">
           <input
             ref={imageInputRef}
             type="file"
@@ -1986,7 +2629,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
         <div
           ref={viewportRef}
-          className="relative flex min-h-0 flex-1 flex-col overflow-auto rounded-2xl bg-[var(--surface-subtle)]"
+          className="relative flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain rounded-2xl bg-[var(--surface-subtle)]"
           onContextMenu={ready ? onViewportContextMenu : undefined}
           onDragOver={ready ? onViewportDragOver : undefined}
           onDrop={ready ? onViewportDrop : undefined}
@@ -1998,11 +2641,15 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         </div>
 
         <EditorContextMenu
+          onAddPage={addPage}
+          canDeletePage={doc.pages.length > 1}
           contextMenu={contextMenu}
           onClose={closeContextMenu}
           onCopy={() => void copyElementToClipboard()}
           onDelete={deleteSelection}
+          onDeletePage={deletePage}
           onDuplicate={() => void duplicateElement()}
+          onDuplicatePage={duplicatePage}
           onPaste={(point) => void pasteFromClipboard(point)}
           onToggleLock={toggleElementLock}
         />

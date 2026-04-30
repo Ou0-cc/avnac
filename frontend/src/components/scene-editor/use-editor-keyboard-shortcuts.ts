@@ -24,6 +24,8 @@ type UseEditorKeyboardShortcutsArgs = {
   historyRef: MutableRefObject<AvnacDocument[]>
   nudgeSelection: (dx: number, dy: number) => void
   onZoomFitRequest: () => void
+  onZoomInRequest: () => void
+  onZoomOutRequest: () => void
   pasteFromClipboard: AsyncCommand
   reorderSelectionLayers: (kind: LayerReorderKind) => void
   setDoc: Dispatch<SetStateAction<AvnacDocument>>
@@ -42,6 +44,8 @@ export function useEditorKeyboardShortcuts({
   historyRef,
   nudgeSelection,
   onZoomFitRequest,
+  onZoomInRequest,
+  onZoomOutRequest,
   pasteFromClipboard,
   reorderSelectionLayers,
   setDoc,
@@ -109,6 +113,22 @@ export function useEditorKeyboardShortcuts({
         void pasteFromClipboard()
         return
       }
+      if (
+        mod &&
+        (e.key === '+' ||
+          (e.key === '=' && e.shiftKey) ||
+          e.code === 'Equal' ||
+          e.code === 'NumpadAdd')
+      ) {
+        e.preventDefault()
+        onZoomInRequest()
+        return
+      }
+      if (mod && (e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract')) {
+        e.preventDefault()
+        onZoomOutRequest()
+        return
+      }
       if (mod && e.code === 'BracketRight') {
         e.preventDefault()
         reorderSelectionLayers(e.shiftKey ? 'front' : 'forward')
@@ -149,8 +169,8 @@ export function useEditorKeyboardShortcuts({
         onZoomFitRequest()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [
     applyingHistoryRef,
     commitTextDraft,
@@ -162,6 +182,8 @@ export function useEditorKeyboardShortcuts({
     historyRef,
     nudgeSelection,
     onZoomFitRequest,
+    onZoomInRequest,
+    onZoomOutRequest,
     pasteFromClipboard,
     reorderSelectionLayers,
     setDoc,

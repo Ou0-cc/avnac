@@ -25,11 +25,15 @@ type ElementToolbarLayout = {
 
 export type CanvasStageContextValue = {
   actions: {
+    activatePage: (pageId: string) => void
+    addPage: (afterPageId?: string) => void
     alignElementToArtboard: (kind: CanvasAlignKind) => void
     alignSelectedElements: (kind: CanvasAlignKind) => void
     commitTextDraft: () => void
     copyElementToClipboard: () => void
     deleteSelection: () => void
+    deletePage: (pageId?: string) => void
+    duplicatePage: (sourcePageId?: string) => void
     duplicateElement: () => void
     groupSelection: () => void
     onArtboardPointerEnter: () => void
@@ -61,6 +65,7 @@ export type CanvasStageContextValue = {
   state: {
     backgroundActive: boolean
     backgroundHovered: boolean
+    deletingPageIds: string[]
     editingSelectedText: boolean
     elementToolbarAlignAlready: Record<CanvasAlignKind, boolean> | null
     elementToolbarCanAlignElements: boolean
