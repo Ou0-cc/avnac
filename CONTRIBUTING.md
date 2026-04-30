@@ -1,6 +1,8 @@
 # Contributing
 
-Thanks for contributing to Avnac. Pull requests are welcome. For major changes, open an issue first so the idea can be discussed before work starts.
+Thanks for contributing to Avnac. Pull requests are welcome.
+
+> Important: For major changes, open an issue first so the idea can be discussed before work starts.
 
 ## Before You Start
 
