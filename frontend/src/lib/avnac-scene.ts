@@ -147,6 +147,16 @@ export type AvnacDocument = {
   artboard: { width: number; height: number }
   bg: BgValue
   objects: SceneObject[]
+  activePageId: string
+  pages: AvnacPage[]
+}
+
+export type AvnacPage = {
+  id: string
+  name: string
+  artboard: { width: number; height: number }
+  bg: BgValue
+  objects: SceneObject[]
 }
 
 export type AvnacDocumentStorageKind = 'current' | 'legacy' | 'invalid'
@@ -160,6 +170,13 @@ const DEFAULT_BG: BgValue = { type: 'solid', color: '#ffffff' }
 function clampSize(n: number, min = 1, max = 16000): number {
   if (!Number.isFinite(n)) return min
   return Math.max(min, Math.min(max, Math.round(n)))
+}
+
+function makeId(prefix: string): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${prefix}-${Math.random().toString(36).slice(2)}`
 }
 
 function clampOpacity(n: number): number {
@@ -773,15 +790,145 @@ export function createEmptyAvnacDocument(
   width: number,
   height: number,
 ): AvnacDocument {
+  const page = createEmptyAvnacPage(width, height, 'Page 1')
   return {
     v: AVNAC_DOC_VERSION,
+    artboard: { ...page.artboard },
+    bg: cloneBgValue(page.bg),
+    objects: [],
+    activePageId: page.id,
+    pages: [page],
+  }
+}
+
+export function createEmptyAvnacPage(
+  width: number,
+  height: number,
+  name = 'Page',
+): AvnacPage {
+  return createAvnacPage({
+    name,
     artboard: {
       width: clampSize(width, 100),
       height: clampSize(height, 100),
     },
-    bg: { ...DEFAULT_BG },
+    bg: DEFAULT_BG,
     objects: [],
+  })
+}
+
+export function createAvnacPage({
+  id,
+  name = 'Page',
+  artboard,
+  bg,
+  objects,
+}: {
+  id?: string
+  name?: string
+  artboard: { width: number; height: number }
+  bg: BgValue
+  objects: SceneObject[]
+}): AvnacPage {
+  return {
+    id: id?.trim() || makeId('page'),
+    name: name.trim() || 'Page',
+    artboard: {
+      width: clampSize(artboard.width, 100),
+      height: clampSize(artboard.height, 100),
+    },
+    bg: cloneBgValue(bg),
+    objects: objects.map((obj) => cloneSceneObject(obj)),
   }
+}
+
+function currentFieldsToPage(
+  doc: AvnacDocument,
+  id: string,
+  fallbackName = 'Page 1',
+): AvnacPage {
+  return createAvnacPage({
+    id,
+    name:
+      doc.pages.find((page) => page.id === id)?.name ||
+      doc.pages[0]?.name ||
+      fallbackName,
+    artboard: doc.artboard,
+    bg: doc.bg,
+    objects: doc.objects,
+  })
+}
+
+export function cloneAvnacPage(page: AvnacPage): AvnacPage {
+  return createAvnacPage(page)
+}
+
+export function syncActivePage(doc: AvnacDocument): AvnacDocument {
+  const existingPages = doc.pages.length > 0 ? doc.pages : []
+  const activePageId =
+    doc.activePageId && existingPages.some((page) => page.id === doc.activePageId)
+      ? doc.activePageId
+      : existingPages[0]?.id || makeId('page')
+  const currentPage = currentFieldsToPage(doc, activePageId)
+  const pages = existingPages.map((page) =>
+    page.id === activePageId ? currentPage : cloneAvnacPage(page),
+  )
+  if (pages.length === 0) {
+    pages.push(currentPage)
+  } else if (!pages.some((page) => page.id === activePageId)) {
+    pages.unshift(currentPage)
+  }
+  const activePage = pages.find((page) => page.id === activePageId) ?? pages[0]
+  return {
+    v: AVNAC_DOC_VERSION,
+    artboard: { ...activePage.artboard },
+    bg: cloneBgValue(activePage.bg),
+    objects: activePage.objects.map((obj) => cloneSceneObject(obj)),
+    activePageId: activePage.id,
+    pages,
+  }
+}
+
+export function activateAvnacPage(doc: AvnacDocument, pageId: string): AvnacDocument {
+  const synced = syncActivePage(doc)
+  const activePage =
+    synced.pages.find((page) => page.id === pageId) ?? synced.pages[0]
+  return {
+    ...synced,
+    artboard: { ...activePage.artboard },
+    bg: cloneBgValue(activePage.bg),
+    objects: activePage.objects.map((obj) => cloneSceneObject(obj)),
+    activePageId: activePage.id,
+  }
+}
+
+function parseAvnacPage(
+  raw: unknown,
+  fallbackIndex: number,
+): AvnacPage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  const artboard = obj.artboard as Record<string, unknown> | undefined
+  if (
+    !artboard ||
+    typeof artboard.width !== 'number' ||
+    typeof artboard.height !== 'number'
+  ) {
+    return null
+  }
+  const objectsRaw = Array.isArray(obj.objects) ? obj.objects : []
+  return createAvnacPage({
+    id: typeof obj.id === 'string' ? obj.id : undefined,
+    name: typeof obj.name === 'string' ? obj.name : `Page ${fallbackIndex + 1}`,
+    artboard: {
+      width: artboard.width,
+      height: artboard.height,
+    },
+    bg: parseBgValue(obj.bg, DEFAULT_BG),
+    objects: objectsRaw
+      .map((row) => parseSceneObject(row))
+      .filter((row): row is SceneObject => row != null),
+  })
 }
 
 function migrateLegacyDocument(raw: Record<string, unknown>): AvnacDocument | null {
@@ -795,14 +942,17 @@ function migrateLegacyDocument(raw: Record<string, unknown>): AvnacDocument | nu
   const objectsRaw = Array.isArray(legacySceneState?.objects)
     ? legacySceneState.objects
     : []
-  return {
+  const doc = {
     v: AVNAC_DOC_VERSION,
     artboard: { width: clampSize(width, 100), height: clampSize(height, 100) },
     bg: parseBgValue(raw.bg, DEFAULT_BG),
     objects: objectsRaw
       .map((obj) => migrateLegacyObject(obj))
       .filter((obj): obj is SceneObject => obj != null),
+    activePageId: '',
+    pages: [],
   }
+  return syncActivePage(doc)
 }
 
 export function getAvnacDocumentStorageKind(
@@ -833,17 +983,26 @@ export function parseAvnacDocument(raw: unknown): AvnacDocument | null {
     ) {
       return null
     }
-    return {
+    const objectsRaw = Array.isArray(obj.objects) ? obj.objects : []
+    const objects = objectsRaw
+      .map((row) => parseSceneObject(row))
+      .filter((row): row is SceneObject => row != null)
+    const pages = Array.isArray(obj.pages)
+      ? obj.pages
+          .map((row, index) => parseAvnacPage(row, index))
+          .filter((row): row is AvnacPage => row != null)
+      : []
+    return syncActivePage({
       v: AVNAC_DOC_VERSION,
       artboard: {
         width: clampSize(artboard.width, 100),
         height: clampSize(artboard.height, 100),
       },
       bg: parseBgValue(obj.bg, DEFAULT_BG),
-      objects: obj.objects
-        .map((row) => parseSceneObject(row))
-        .filter((row): row is SceneObject => row != null),
-    }
+      objects,
+      activePageId: typeof obj.activePageId === 'string' ? obj.activePageId : '',
+      pages,
+    })
   }
   if (kind === 'legacy') {
     return migrateLegacyDocument(obj)
@@ -892,11 +1051,14 @@ export function cloneSceneObject<T extends SceneObject>(obj: T): T {
 }
 
 export function cloneAvnacDocument(doc: AvnacDocument): AvnacDocument {
+  const synced = syncActivePage(doc)
   return {
     v: AVNAC_DOC_VERSION,
-    artboard: { ...doc.artboard },
-    bg: cloneBgValue(doc.bg),
-    objects: doc.objects.map((obj) => cloneSceneObject(obj)),
+    artboard: { ...synced.artboard },
+    bg: cloneBgValue(synced.bg),
+    objects: synced.objects.map((obj) => cloneSceneObject(obj)),
+    activePageId: synced.activePageId,
+    pages: synced.pages.map((page) => cloneAvnacPage(page)),
   }
 }
 
