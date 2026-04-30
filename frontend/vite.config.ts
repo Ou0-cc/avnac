@@ -29,6 +29,9 @@ const hasHugeiconsPro = (() => {
 
 const config = defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  console.info(
+    `[icons] ${hasHugeiconsPro ? "Hugeicons Pro detected" : "Hugeicons Pro not installed; using free fallback"}`,
+  );
   return {
     base: "/",
     resolve: {
