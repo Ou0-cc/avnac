@@ -50,10 +50,10 @@ export function EditorSelectionToolbar() {
     viewportRef,
   } = refs
   const {
+    backgroundActive,
     backgroundPopoverOpenUpward,
     backgroundPopoverShiftX,
     bgPopoverOpen,
-    canvasBodySelected,
     elementToolbarLockedDisplay,
     hasObjectSelected,
     imageCornerToolbar,
@@ -68,7 +68,11 @@ export function EditorSelectionToolbar() {
   const showEffectsToolbar =
     ready && hasObjectSelected && !textToolbarValues && !shapeToolbarModel
   const showBackgroundToolbar =
-    ready && !textToolbarValues && !shapeToolbarModel && canvasBodySelected
+    ready &&
+    backgroundActive &&
+    !hasObjectSelected &&
+    !textToolbarValues &&
+    !shapeToolbarModel
 
   if (
     !showTextToolbar &&
