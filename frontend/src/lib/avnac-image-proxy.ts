@@ -20,7 +20,6 @@ function isProxyUrl(raw: string): boolean {
 }
 
 export function getExportSafeImageUrl(raw: string): string {
-  console.debug('getExportSafeImageUrl', { raw })
   const trimmed = raw.trim()
   if (!trimmed) return trimmed
   const parsed = parseImageUrl(trimmed)
