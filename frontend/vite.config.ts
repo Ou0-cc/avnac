@@ -2,7 +2,10 @@ import { defineConfig, loadEnv } from "vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
 
 const standardJsonEsm = fileURLToPath(
   new URL(
@@ -11,6 +14,19 @@ const standardJsonEsm = fileURLToPath(
   ),
 );
 
+const proEditorSidebarIconsModule = fileURLToPath(
+  new URL("./src/lib/editor-sidebar-icons.pro.ts", import.meta.url),
+);
+
+const hasHugeiconsPro = (() => {
+  try {
+    require.resolve("@hugeicons-pro/core-solid-rounded/package.json");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 const config = defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
@@ -18,6 +34,14 @@ const config = defineConfig(({ mode }) => {
     resolve: {
       tsconfigPaths: true,
       alias: [
+        ...(hasHugeiconsPro
+          ? [
+              {
+                find: /^@\/lib\/editor-sidebar-icons$/,
+                replacement: proEditorSidebarIconsModule,
+              },
+            ]
+          : []),
         // Rolldown/Vite 8 can't parse `.cjs` files that contain dynamic
         // `await import(...)`. Force this dep to its ESM entry so the
         // `require` condition from @tambo-ai/client never pulls the CJS
