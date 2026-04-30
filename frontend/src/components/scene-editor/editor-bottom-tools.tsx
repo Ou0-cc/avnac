@@ -74,13 +74,13 @@ export function EditorBottomTools({
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-2 pt-24">
         <div
-          className="pointer-events-auto flex items-center gap-1 rounded-full border border-black/[0.08] bg-white/85 px-2 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.8)_inset] backdrop-blur-xl"
+          className="pointer-events-auto flex items-center gap-1 rounded-full border border-black/[0.08] bg-white/85 px-1.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.8)_inset] backdrop-blur-xl"
           role="toolbar"
           aria-label="Editor tools"
         >
           <div
             ref={shapeToolSplitRef}
-            className="relative flex items-stretch rounded-lg border border-black/[0.06] bg-black/[0.02]"
+            className="relative flex items-stretch rounded-full border border-black/[0.06] bg-black/[0.02]"
           >
             <button
               type="button"
@@ -99,7 +99,7 @@ export function EditorBottomTools({
             <button
               type="button"
               disabled={!ready}
-              className={`${toolbarIconBtn(!ready)} rounded-l-none rounded-r-lg border-0 border-l border-black/[0.06]`}
+              className={`${toolbarIconBtn(!ready)} rounded-l-none rounded-r-full border-0 border-l border-black/[0.06]`}
               onClick={() => setShapesPopoverOpen((open) => !open)}
               aria-expanded={shapesPopoverOpen}
               aria-haspopup="menu"
