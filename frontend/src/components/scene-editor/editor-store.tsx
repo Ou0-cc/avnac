@@ -10,7 +10,10 @@ import {
   type StoreApi,
 } from 'zustand/vanilla'
 
-import type { AvnacDocument } from '../../lib/avnac-scene'
+import {
+  syncActivePage,
+  type AvnacDocument,
+} from '../../lib/avnac-scene'
 
 type EditorSetter<T> = SetStateAction<T>
 
@@ -33,10 +36,11 @@ export type EditorStoreApi = StoreApi<EditorStoreState>
 
 export function createEditorStore(initialDoc: AvnacDocument): EditorStoreApi {
   return createStore<EditorStoreState>((set) => ({
-    doc: initialDoc,
+    doc: syncActivePage(initialDoc),
     hoveredId: null,
     selectedIds: [],
-    setDoc: (next) => set((state) => ({ doc: applySetter(next, state.doc) })),
+    setDoc: (next) =>
+      set((state) => ({ doc: syncActivePage(applySetter(next, state.doc)) })),
     setHoveredId: (next) =>
       set((state) => ({ hoveredId: applySetter(next, state.hoveredId) })),
     setSelectedIds: (next) =>
