@@ -27,7 +27,7 @@ type Sticker = {
 const initialStickers: Sticker[] = [
   {
     id: "sunflower",
-    src: "/stickers/sunflower-badge.webp",
+    src: `${import.meta.env.BASE_URL}stickers/sunflower-badge.webp`,
     label: "Sunflower sticker",
     rotation: 6,
     size: "clamp(5.6rem, 10.8vw, 8.8rem)",
@@ -36,7 +36,7 @@ const initialStickers: Sticker[] = [
   },
   {
     id: "star",
-    src: "/stickers/shooting-star-badge.webp",
+    src: `${import.meta.env.BASE_URL}stickers/shooting-star-badge.webp`,
     label: "Shooting star sticker",
     rotation: -7,
     size: "clamp(4.4rem, 8.8vw, 7.4rem)",
@@ -45,7 +45,7 @@ const initialStickers: Sticker[] = [
   },
   {
     id: "pineapple",
-    src: "/stickers/pineapple.webp",
+    src: `${import.meta.env.BASE_URL}stickers/pineapple.webp`,
     label: "Pineapple sticker",
     rotation: 7,
     size: "clamp(5.4rem, 11.2vw, 9.1rem)",
@@ -54,7 +54,7 @@ const initialStickers: Sticker[] = [
   },
   {
     id: "donut",
-    src: "/stickers/donut.webp",
+    src: `${import.meta.env.BASE_URL}stickers/donut.webp`,
     label: "Donut sticker",
     rotation: -8,
     size: "clamp(4.9rem, 9.6vw, 8rem)",
@@ -63,7 +63,7 @@ const initialStickers: Sticker[] = [
   },
   {
     id: "lollipop",
-    src: "/stickers/lollipop.webp",
+    src: `${import.meta.env.BASE_URL}stickers/lollipop.webp`,
     label: "Lollipop sticker",
     rotation: 12,
     size: "clamp(4.1rem, 8vw, 6.5rem)",
@@ -72,7 +72,7 @@ const initialStickers: Sticker[] = [
   },
   {
     id: "leaf",
-    src: "/stickers/leaf.webp",
+    src: `${import.meta.env.BASE_URL}stickers/leaf.webp`,
     label: "Leaf sticker",
     rotation: -11,
     size: "clamp(4rem, 7.8vw, 6.2rem)",
@@ -458,7 +458,7 @@ function Landing() {
               </button>
               <Link
                 to="/studio"
-                className="inline-flex min-h-12 items-center justify-center rounded-full border border-black/14 bg-white/85 px-8 py-3.5 text-base font-medium text-(--text) no-underline backdrop-blur-sm hover:border-black/22 hover:bg-white sm:min-h-14 sm:px-10 sm:py-4 sm:text-[1.0625rem]"
+                className="hidden! inline-flex min-h-12 items-center justify-center rounded-full border border-black/14 bg-white/85 px-8 py-3.5 text-base font-medium text-(--text) no-underline backdrop-blur-sm hover:border-black/22 hover:bg-white sm:min-h-14 sm:px-10 sm:py-4 sm:text-[1.0625rem]"
               >
                 Avnac Studio
               </Link>
@@ -637,6 +637,15 @@ function Landing() {
               </a>
             </div>
           </div>
+        </div>
+      </section>
+
+        {/* credits and disclaimer footer */}
+      <section className="landing-section landing-section-footer">
+        <div className="landing-container">
+          <p className="text-sm text-center text-[var(--text-muted)]">
+            Deployment for research and demonstration purposes. Original software by akinloluwami. No copyright infringement intended; all rights belong to the original author.<br/>
+          </p>
         </div>
       </section>
 

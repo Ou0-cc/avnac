@@ -44,13 +44,13 @@ const ITEMS: Item[] = [
     icon: editorSidebarIcons.apps.icon,
     activeIcon: editorSidebarIcons.apps.activeIcon,
   },
-  {
-    id: 'ai',
-    label: 'Magic',
-    icon: editorSidebarIcons.ai.icon,
-    activeIcon: editorSidebarIcons.ai.activeIcon,
-    fancy: true,
-  },
+  // {
+  //   id: 'ai',
+  //   label: 'Magic',
+  //   icon: editorSidebarIcons.ai.icon,
+  //   activeIcon: editorSidebarIcons.ai.activeIcon,
+  //   fancy: true,
+  // },
 ]
 
 type Props = {
