@@ -14,9 +14,12 @@ import { createPortal } from 'react-dom'
 import { useStore } from 'zustand'
 import {
   AVNAC_DOC_VERSION,
+  activateAvnacPage,
   cloneAvnacDocument,
   cloneSceneObject,
+  createAvnacPage,
   createEmptyAvnacDocument,
+  createEmptyAvnacPage,
   createGroupFromSelection,
   getObjectCenter,
   getObjectFill,
@@ -1903,8 +1906,119 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
     )
 
     const closeContextMenu = useCallback(() => setContextMenu(null), [])
-    const addPage = useCallback(() => {}, [])
-    const duplicatePage = useCallback(() => {}, [])
+    const clearPageInteractionState = useCallback(() => {
+      setSelectedIds([])
+      setHoveredId(null)
+      setTextEditingId(null)
+      setBackgroundHovered(false)
+      setBackgroundActive(false)
+      setMarqueeRect(null)
+      setContextMenu(null)
+    }, [setHoveredId, setSelectedIds])
+
+    const activatePage = useCallback((pageId: string) => {
+      commitTextDraft()
+      setDoc((prev) =>
+        prev.activePageId === pageId ? prev : activateAvnacPage(prev, pageId),
+      )
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    const addPage = useCallback((afterPageId?: string) => {
+      commitTextDraft()
+      setDoc((prev) => {
+        const requestedIndex = afterPageId
+          ? prev.pages.findIndex((page) => page.id === afterPageId)
+          : -1
+        const activeIndex =
+          requestedIndex >= 0
+            ? requestedIndex
+            : prev.pages.findIndex((page) => page.id === prev.activePageId)
+        const sourcePage = activeIndex >= 0 ? prev.pages[activeIndex] : null
+        const insertAt = activeIndex >= 0 ? activeIndex + 1 : prev.pages.length
+        const nextPage = createEmptyAvnacPage(
+          sourcePage?.artboard.width ?? prev.artboard.width,
+          sourcePage?.artboard.height ?? prev.artboard.height,
+          `Page ${prev.pages.length + 1}`,
+        )
+        const pages = [...prev.pages]
+        pages.splice(insertAt, 0, nextPage)
+        return activateAvnacPage({ ...prev, pages }, nextPage.id)
+      })
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    const duplicatePage = useCallback((sourcePageId?: string) => {
+      commitTextDraft()
+      setDoc((prev) => {
+        const requestedIndex = sourcePageId
+          ? prev.pages.findIndex((page) => page.id === sourcePageId)
+          : -1
+        const activeIndex =
+          requestedIndex >= 0
+            ? requestedIndex
+            : prev.pages.findIndex((page) => page.id === prev.activePageId)
+        const activePage =
+          activeIndex >= 0
+            ? prev.pages[activeIndex]
+            : createAvnacPage({
+                name: 'Page 1',
+                artboard: prev.artboard,
+                bg: prev.bg,
+                objects: prev.objects,
+              })
+        const duplicatedPage = createAvnacPage({
+          name: `${activePage.name || `Page ${activeIndex + 1}`} copy`,
+          artboard: activePage.artboard,
+          bg: activePage.bg,
+          objects: activePage.objects.map((obj) => renameWithFreshIds(obj)),
+        })
+        const pages = [...prev.pages]
+        pages.splice(
+          activeIndex >= 0 ? activeIndex + 1 : pages.length,
+          0,
+          duplicatedPage,
+        )
+        return activateAvnacPage({ ...prev, pages }, duplicatedPage.id)
+      })
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
+
+    const deletePage = useCallback((pageId?: string) => {
+      commitTextDraft()
+      setDoc((prev) => {
+        const targetIndex = pageId
+          ? prev.pages.findIndex((page) => page.id === pageId)
+          : prev.pages.findIndex((page) => page.id === prev.activePageId)
+        const targetPage =
+          targetIndex >= 0
+            ? prev.pages[targetIndex]
+            : createAvnacPage({
+                name: 'Page 1',
+                artboard: prev.artboard,
+                bg: prev.bg,
+                objects: prev.objects,
+              })
+
+        if (prev.pages.length <= 1) {
+          const blankPage = createEmptyAvnacPage(
+            targetPage.artboard.width,
+            targetPage.artboard.height,
+            targetPage.name || 'Page 1',
+          )
+          return activateAvnacPage({ ...prev, pages: [blankPage] }, blankPage.id)
+        }
+
+        const pages = prev.pages.filter((page) => page.id !== targetPage.id)
+        const fallbackPage = pages[Math.min(targetIndex, pages.length - 1)] ?? pages[0]
+        const nextActivePageId =
+          targetPage.id === prev.activePageId
+            ? fallbackPage.id
+            : prev.activePageId
+        return activateAvnacPage({ ...prev, pages }, nextActivePageId)
+      })
+      clearPageInteractionState()
+    }, [clearPageInteractionState, commitTextDraft, setDoc])
 
     useEditorKeyboardShortcuts({
       applyingHistoryRef,
@@ -2055,6 +2169,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
 
     const canvasStageValue: CanvasStageContextValue = {
       actions: {
+        activatePage,
         addPage,
         alignElementToArtboard,
         alignSelectedElements,
