@@ -62,74 +62,97 @@ export function EditorSelectionToolbar() {
     shapeToolbarModel,
     textToolbarValues,
   } = state
+
+  const showTextToolbar = ready && !!textToolbarValues
+  const showShapeToolbar = ready && !textToolbarValues && !!shapeToolbarModel
+  const showEffectsToolbar =
+    ready && hasObjectSelected && !textToolbarValues && !shapeToolbarModel
+  const showBackgroundToolbar =
+    ready && !textToolbarValues && !shapeToolbarModel && canvasBodySelected
+
+  if (
+    !showTextToolbar &&
+    !showShapeToolbar &&
+    !showEffectsToolbar &&
+    !showBackgroundToolbar
+  ) {
+    return null
+  }
+
   return (
     <div
       ref={selectionToolsRef}
-      className="pointer-events-auto relative z-30 flex h-14 w-full shrink-0 items-center justify-center px-1 sm:px-2"
+      className="pointer-events-none absolute left-1/2 -top-3 z-30 -translate-x-1/2"
     >
-      {ready && textToolbarValues ? (
-        <TextFormatToolbar
-          values={textToolbarValues}
-          onChange={onTextFormatChange}
-          footerSlot={selectionEffectsFooterSlot}
-        />
+      {showTextToolbar ? (
+        <div className="pointer-events-auto">
+          <TextFormatToolbar
+            values={textToolbarValues}
+            onChange={onTextFormatChange}
+            footerSlot={selectionEffectsFooterSlot}
+          />
+        </div>
       ) : null}
-      {ready && !textToolbarValues && shapeToolbarModel ? (
-        <ShapeOptionsToolbar
-          meta={shapeToolbarModel.meta}
-          paintValue={shapeToolbarModel.paint}
-          onPaintChange={applyPaintToSelection}
-          onPolygonSides={applyPolygonSides}
-          onStarPoints={applyStarPoints}
-          onArrowLineStyle={applyArrowLineStyle}
-          onArrowRoundedEnds={applyArrowRoundedEnds}
-          onArrowStrokeWidth={applyArrowStrokeWidth}
-          onArrowPathType={applyArrowPathType}
-          rectCornerRadius={shapeToolbarModel.rectCornerRadius}
-          rectCornerRadiusMax={shapeToolbarModel.rectCornerRadiusMax}
-          onRectCornerRadius={
-            shapeToolbarModel.meta.kind === 'rect'
-              ? applyRectCornerRadius
-              : undefined
-          }
-          footerSlot={selectionEffectsFooterSlot}
-        />
+      {showShapeToolbar ? (
+        <div className="pointer-events-auto">
+          <ShapeOptionsToolbar
+            meta={shapeToolbarModel.meta}
+            paintValue={shapeToolbarModel.paint}
+            onPaintChange={applyPaintToSelection}
+            onPolygonSides={applyPolygonSides}
+            onStarPoints={applyStarPoints}
+            onArrowLineStyle={applyArrowLineStyle}
+            onArrowRoundedEnds={applyArrowRoundedEnds}
+            onArrowStrokeWidth={applyArrowStrokeWidth}
+            onArrowPathType={applyArrowPathType}
+            rectCornerRadius={shapeToolbarModel.rectCornerRadius}
+            rectCornerRadiusMax={shapeToolbarModel.rectCornerRadiusMax}
+            onRectCornerRadius={
+              shapeToolbarModel.meta.kind === 'rect'
+                ? applyRectCornerRadius
+                : undefined
+            }
+            footerSlot={selectionEffectsFooterSlot}
+          />
+        </div>
       ) : null}
-      {ready && hasObjectSelected && !textToolbarValues && !shapeToolbarModel ? (
-        <FloatingToolbarShell role="toolbar" aria-label="Selection">
-          <div className="flex items-center py-1 pl-2 pr-2">
-            {imageCornerToolbar ? (
-              <>
-                <button
-                  type="button"
-                  disabled={elementToolbarLockedDisplay}
-                  className={[
-                    floatingToolbarIconButton(false),
-                    elementToolbarLockedDisplay
-                      ? 'pointer-events-none opacity-40'
-                      : '',
-                  ].join(' ')}
-                  onClick={openImageCropModal}
-                  aria-label="Crop image"
-                  title="Crop image"
-                >
-                  <HugeiconsIcon icon={CropIcon} size={20} strokeWidth={1.75} />
-                </button>
-                <CornerRadiusToolbarControl
-                  value={imageCornerToolbar.radius}
-                  max={imageCornerToolbar.max}
-                  onChange={applyImageCornerRadius}
-                  disabled={elementToolbarLockedDisplay}
-                />
-                <FloatingToolbarDivider />
-              </>
-            ) : null}
-            {selectionEffectsFooterSlot}
-          </div>
-        </FloatingToolbarShell>
+      {showEffectsToolbar ? (
+        <div className="pointer-events-auto">
+          <FloatingToolbarShell role="toolbar" aria-label="Selection">
+            <div className="flex items-center py-1 pl-2 pr-2">
+              {imageCornerToolbar ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={elementToolbarLockedDisplay}
+                    className={[
+                      floatingToolbarIconButton(false),
+                      elementToolbarLockedDisplay
+                        ? 'pointer-events-none opacity-40'
+                        : '',
+                    ].join(' ')}
+                    onClick={openImageCropModal}
+                    aria-label="Crop image"
+                    title="Crop image"
+                  >
+                    <HugeiconsIcon icon={CropIcon} size={20} strokeWidth={1.75} />
+                  </button>
+                  <CornerRadiusToolbarControl
+                    value={imageCornerToolbar.radius}
+                    max={imageCornerToolbar.max}
+                    onChange={applyImageCornerRadius}
+                    disabled={elementToolbarLockedDisplay}
+                  />
+                  <FloatingToolbarDivider />
+                </>
+              ) : null}
+              {selectionEffectsFooterSlot}
+            </div>
+          </FloatingToolbarShell>
+        </div>
       ) : null}
-      {ready && !textToolbarValues && !shapeToolbarModel && canvasBodySelected ? (
-        <div ref={backgroundPopoverAnchorRef} className="relative">
+      {showBackgroundToolbar ? (
+        <div ref={backgroundPopoverAnchorRef} className="pointer-events-auto relative">
           <div className="flex items-center rounded-full border border-black/[0.08] bg-white/90 px-2 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md">
             <ArtboardResizeToolbarControl
               width={artboard.width}
