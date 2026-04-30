@@ -3,6 +3,7 @@ import {
   Copy01Icon,
   Delete02Icon,
   FilePasteIcon,
+  LayerAddIcon,
   Layers02Icon,
   SquareLock01Icon,
   SquareUnlock01Icon,
@@ -21,19 +22,23 @@ const contextMenuButtonClass =
   'flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-neutral-800 outline-none hover:bg-black/[0.05] focus:bg-black/[0.05]'
 
 export function EditorContextMenu({
+  onAddPage,
   contextMenu,
   onClose,
   onCopy,
   onDelete,
   onDuplicate,
+  onDuplicatePage,
   onPaste,
   onToggleLock,
 }: {
+  onAddPage: () => void
   contextMenu: EditorContextMenuState | null
   onClose: () => void
   onCopy: () => void
   onDelete: () => void
   onDuplicate: () => void
+  onDuplicatePage: () => void
   onPaste: (point: { x: number; y: number }) => void
   onToggleLock: () => void
 }) {
@@ -104,6 +109,30 @@ export function EditorContextMenu({
       >
         <HugeiconsIcon icon={FilePasteIcon} size={18} strokeWidth={1.75} />
         Paste
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={contextMenuButtonClass}
+        onClick={() => {
+          onDuplicatePage()
+          onClose()
+        }}
+      >
+        <HugeiconsIcon icon={Copy01Icon} size={18} strokeWidth={1.75} />
+        Duplicate page
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={contextMenuButtonClass}
+        onClick={() => {
+          onAddPage()
+          onClose()
+        }}
+      >
+        <HugeiconsIcon icon={LayerAddIcon} size={18} strokeWidth={1.75} />
+        Add new page
       </button>
       {contextMenu.hasSelection ? (
         <>
