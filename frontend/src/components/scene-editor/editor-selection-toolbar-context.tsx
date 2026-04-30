@@ -33,10 +33,10 @@ type SelectionToolbarRefs = {
 }
 
 type SelectionToolbarState = {
+  backgroundActive: boolean
   backgroundPopoverOpenUpward: boolean
   backgroundPopoverShiftX: number
   bgPopoverOpen: boolean
-  canvasBodySelected: boolean
   elementToolbarLockedDisplay: boolean
   hasObjectSelected: boolean
   imageCornerToolbar: SelectionImageCornerToolbar | null
