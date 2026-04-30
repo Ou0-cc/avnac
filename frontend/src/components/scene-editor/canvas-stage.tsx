@@ -92,7 +92,7 @@ export function CanvasStage() {
 
   return (
     <div className="flex min-h-min w-full flex-1 flex-col items-center justify-center px-4 pb-4 pt-0 sm:px-6 sm:pb-6 sm:pt-1">
-      <div className="relative z-0 -mt-4 inline-block sm:-mt-5">
+      <div className="relative z-0 -mt-8 inline-block sm:-mt-10">
         {ready && hasObjectSelected && elementToolbarLayout && !editingSelectedText ? (
           <CanvasElementToolbar
             ref={elementToolbarRef}
