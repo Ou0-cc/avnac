@@ -1,15 +1,11 @@
 import {
-  useLayoutEffect,
-  useRef,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  useLayoutEffect,
+  useRef,
 } from 'react'
 
-import {
-  type SceneArrow,
-  type SceneObject,
-  type SceneText,
-} from '../../lib/avnac-scene'
+import type { SceneArrow, SceneObject, SceneText } from '../../lib/avnac-scene'
 import {
   bgValueToSceneCss,
   blurPxFromPct,
@@ -57,7 +53,7 @@ function svgGradientDef(id: string, value: BgValue) {
   const ends = gradientEndpoints(value.angle)
   return (
     <linearGradient id={id} x1={ends.x1} y1={ends.y1} x2={ends.x2} y2={ends.y2}>
-      {value.stops.map((stop) => (
+      {value.stops.map(stop => (
         <stop
           key={`${id}-${stop.offset}-${stop.color}`}
           offset={`${stop.offset * 100}%`}
@@ -155,11 +151,11 @@ export function SceneObjectView({
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked group' : undefined}
       >
-        {obj.children.map((child) => (
+        {obj.children.map(child => (
           <div key={child.id} style={{ pointerEvents: 'none' }}>
             <SceneObjectView
               obj={child}
@@ -185,7 +181,7 @@ export function SceneObjectView({
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked image' : undefined}
       >
@@ -216,7 +212,7 @@ export function SceneObjectView({
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked vector board' : undefined}
       >
@@ -231,9 +227,7 @@ export function SceneObjectView({
 
   if (obj.type === 'text') {
     const layout = layoutSceneText(obj)
-    const draftLayout = isEditing
-      ? layoutSceneText({ ...obj, text: textDraft })
-      : layout
+    const draftLayout = isEditing ? layoutSceneText({ ...obj, text: textDraft }) : layout
     const lineHeight = sceneTextLineHeight(obj)
     return (
       <div
@@ -246,9 +240,7 @@ export function SceneObjectView({
             : style
         }
         data-avnac-scene-object
-        onPointerDown={
-          isEditing ? undefined : (e) => onObjectPointerDown(e, obj)
-        }
+        onPointerDown={isEditing ? undefined : e => onObjectPointerDown(e, obj)}
         onDoubleClick={() => onTextDoubleClick(obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked text' : undefined}
@@ -256,10 +248,10 @@ export function SceneObjectView({
         {isEditing ? (
           <textarea
             value={textDraft}
-            onChange={(e) => onTextDraftChange(e.target.value)}
+            onChange={e => onTextDraftChange(e.target.value)}
             onBlur={onTextDraftCommit}
-            onPointerDown={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
+            onDoubleClick={e => e.stopPropagation()}
             autoFocus
             spellCheck={false}
             className="h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none select-text"
@@ -288,10 +280,8 @@ export function SceneObjectView({
               color: obj.fill.type === 'solid' ? obj.fill.color : 'transparent',
               backgroundImage:
                 obj.fill.type === 'gradient' ? bgValueToSceneCss(obj.fill) : undefined,
-              WebkitBackgroundClip:
-                obj.fill.type === 'gradient' ? 'text' : undefined,
-              backgroundClip:
-                obj.fill.type === 'gradient' ? 'text' : undefined,
+              WebkitBackgroundClip: obj.fill.type === 'gradient' ? 'text' : undefined,
+              backgroundClip: obj.fill.type === 'gradient' ? 'text' : undefined,
               textDecoration: obj.underline ? 'underline' : undefined,
               textDecorationThickness: obj.underline ? Math.max(1, obj.fontSize * 0.06) : undefined,
               WebkitTextStroke:
@@ -318,7 +308,7 @@ export function SceneObjectView({
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
         title={obj.locked ? 'Locked shape' : undefined}
       >
@@ -349,7 +339,7 @@ export function SceneObjectView({
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
       >
         <svg width={obj.width} height={obj.height} style={shapeSvgStyle}>
@@ -377,23 +367,23 @@ export function SceneObjectView({
         ? Array.from({ length: Math.max(3, obj.sides) }, (_, i) => {
             const a = -Math.PI / 2 + (i / Math.max(3, obj.sides)) * Math.PI * 2
             return [
-              obj.width / 2 + Math.cos(a) * obj.width / 2,
-              obj.height / 2 + Math.sin(a) * obj.height / 2,
+              obj.width / 2 + (Math.cos(a) * obj.width) / 2,
+              obj.height / 2 + (Math.sin(a) * obj.height) / 2,
             ]
           })
         : Array.from({ length: Math.max(4, obj.points) * 2 }, (_, i) => {
             const a = -Math.PI / 2 + (i / (Math.max(4, obj.points) * 2)) * Math.PI * 2
             const r = i % 2 === 0 ? 1 : 0.45
             return [
-              obj.width / 2 + Math.cos(a) * obj.width / 2 * r,
-              obj.height / 2 + Math.sin(a) * obj.height / 2 * r,
+              obj.width / 2 + ((Math.cos(a) * obj.width) / 2) * r,
+              obj.height / 2 + ((Math.sin(a) * obj.height) / 2) * r,
             ]
           })
     return (
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
       >
         <svg width={obj.width} height={obj.height} style={shapeSvgStyle}>
@@ -418,7 +408,7 @@ export function SceneObjectView({
       <div
         style={style}
         data-avnac-scene-object
-        onPointerDown={(e) => onObjectPointerDown(e, obj)}
+        onPointerDown={e => onObjectPointerDown(e, obj)}
         {...hoverProps}
       >
         <svg width={obj.width} height={obj.height} style={shapeSvgStyle}>
@@ -462,7 +452,7 @@ export function SceneObjectView({
     <div
       style={style}
       data-avnac-scene-object
-      onPointerDown={(e) => onObjectPointerDown(e, obj)}
+      onPointerDown={e => onObjectPointerDown(e, obj)}
       {...hoverProps}
     >
       <svg width={arrow.width} height={arrow.height} style={shapeSvgStyle}>

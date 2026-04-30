@@ -1,10 +1,8 @@
-import { HugeiconsIcon } from '@hugeicons/react'
 import { CropIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 
 import ArtboardResizeToolbarControl from '../artboard-resize-toolbar-control'
-import BackgroundPopover, {
-  bgValueToSwatch,
-} from '../background-popover'
+import BackgroundPopover, { bgValueToSwatch } from '../background-popover'
 import CornerRadiusToolbarControl from '../corner-radius-toolbar-control'
 import {
   FloatingToolbarDivider,
@@ -25,8 +23,8 @@ function backgroundTopBtn(disabled?: boolean) {
 
 export function EditorSelectionToolbar() {
   const { actions, refs, state } = useEditorSelectionToolbar()
-  const artboard = useEditorStore((storeState) => storeState.doc.artboard)
-  const bg = useEditorStore((storeState) => storeState.doc.bg)
+  const artboard = useEditorStore(storeState => storeState.doc.artboard)
+  const bg = useEditorStore(storeState => storeState.doc.bg)
   const {
     applyArrowLineStyle,
     applyArrowPathType,
@@ -43,12 +41,8 @@ export function EditorSelectionToolbar() {
     openImageCropModal,
     toggleBackgroundPopover,
   } = actions
-  const {
-    backgroundPopoverAnchorRef,
-    backgroundPopoverPanelRef,
-    selectionToolsRef,
-    viewportRef,
-  } = refs
+  const { backgroundPopoverAnchorRef, backgroundPopoverPanelRef, selectionToolsRef, viewportRef } =
+    refs
   const {
     backgroundActive,
     backgroundPopoverOpenUpward,
@@ -65,21 +59,11 @@ export function EditorSelectionToolbar() {
 
   const showTextToolbar = ready && !!textToolbarValues
   const showShapeToolbar = ready && !textToolbarValues && !!shapeToolbarModel
-  const showEffectsToolbar =
-    ready && hasObjectSelected && !textToolbarValues && !shapeToolbarModel
+  const showEffectsToolbar = ready && hasObjectSelected && !textToolbarValues && !shapeToolbarModel
   const showBackgroundToolbar =
-    ready &&
-    backgroundActive &&
-    !hasObjectSelected &&
-    !textToolbarValues &&
-    !shapeToolbarModel
+    ready && backgroundActive && !hasObjectSelected && !textToolbarValues && !shapeToolbarModel
 
-  if (
-    !showTextToolbar &&
-    !showShapeToolbar &&
-    !showEffectsToolbar &&
-    !showBackgroundToolbar
-  ) {
+  if (!showTextToolbar && !showShapeToolbar && !showEffectsToolbar && !showBackgroundToolbar) {
     return null
   }
 
@@ -112,9 +96,7 @@ export function EditorSelectionToolbar() {
             rectCornerRadius={shapeToolbarModel.rectCornerRadius}
             rectCornerRadiusMax={shapeToolbarModel.rectCornerRadiusMax}
             onRectCornerRadius={
-              shapeToolbarModel.meta.kind === 'rect'
-                ? applyRectCornerRadius
-                : undefined
+              shapeToolbarModel.meta.kind === 'rect' ? applyRectCornerRadius : undefined
             }
             footerSlot={selectionEffectsFooterSlot}
           />
@@ -131,9 +113,7 @@ export function EditorSelectionToolbar() {
                     disabled={elementToolbarLockedDisplay}
                     className={[
                       floatingToolbarIconButton(false),
-                      elementToolbarLockedDisplay
-                        ? 'pointer-events-none opacity-40'
-                        : '',
+                      elementToolbarLockedDisplay ? 'pointer-events-none opacity-40' : '',
                     ].join(' ')}
                     onClick={openImageCropModal}
                     aria-label="Crop image"

@@ -1,21 +1,14 @@
 import {
   createContext,
-  useContext,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
+  useContext,
 } from 'react'
 
-import type {
-  SceneObject,
-  SceneText,
-} from '../../lib/avnac-scene'
+import type { SceneObject, SceneText } from '../../lib/avnac-scene'
+import type { MarqueeRect, ResizeHandleId, SceneSnapGuide } from '../../scene-engine/primitives'
 import type { CanvasAlignKind } from '../canvas-element-toolbar'
-import type {
-  MarqueeRect,
-  ResizeHandleId,
-  SceneSnapGuide,
-} from '../../scene-engine/primitives'
 
 type ElementToolbarLayout = {
   left: number
@@ -40,10 +33,7 @@ export type CanvasStageContextValue = {
     onArtboardPointerLeave: () => void
     onArtboardPointerMove: () => void
     onObjectHoverChange: (id: string, hovering: boolean) => void
-    onObjectPointerDown: (
-      e: ReactPointerEvent<HTMLDivElement>,
-      obj: SceneObject,
-    ) => void
+    onObjectPointerDown: (e: ReactPointerEvent<HTMLDivElement>, obj: SceneObject) => void
     onRotateHandlePointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void
     onSelectionHandlePointerDown: (
       e: ReactPointerEvent<HTMLButtonElement>,
@@ -95,11 +85,7 @@ export function CanvasStageProvider({
   children: ReactNode
   value: CanvasStageContextValue
 }) {
-  return (
-    <CanvasStageContext.Provider value={value}>
-      {children}
-    </CanvasStageContext.Provider>
-  )
+  return <CanvasStageContext.Provider value={value}>{children}</CanvasStageContext.Provider>
 }
 
 export function useCanvasStageContext() {

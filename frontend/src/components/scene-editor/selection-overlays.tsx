@@ -1,13 +1,10 @@
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent,
-} from 'react'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 
 import type { SceneObject } from '../../lib/avnac-scene'
 import {
   cursorForHandle,
-  type ResizeHandleId,
   RESIZE_HANDLES,
+  type ResizeHandleId,
   type SceneSnapGuide,
 } from '../../scene-engine/primitives'
 
@@ -21,10 +18,7 @@ export function SelectionOverlay({
 }: {
   object: SceneObject
   scale: number
-  onHandlePointerDown: (
-    e: ReactPointerEvent<HTMLButtonElement>,
-    handle: ResizeHandleId,
-  ) => void
+  onHandlePointerDown: (e: ReactPointerEvent<HTMLButtonElement>, handle: ResizeHandleId) => void
   onRotatePointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void
 }) {
   const screenScale = Math.max(scale, 0.01)
@@ -59,7 +53,7 @@ export function SelectionOverlay({
           boxShadow: `0 0 0 ${1 / screenScale}px rgba(255,255,255,0.9), 0 0 0 ${2.5 / screenScale}px color-mix(in srgb, ${SELECT_ACCENT} 16%, transparent)`,
         }}
       />
-      {RESIZE_HANDLES.map((handle) => {
+      {RESIZE_HANDLES.map(handle => {
         const horizontalSide = handle === 'e' || handle === 'w'
         const verticalSide = handle === 'n' || handle === 's'
         const side = horizontalSide || verticalSide
@@ -101,7 +95,7 @@ export function SelectionOverlay({
               height: hitHeight,
               cursor: cursorForHandle(handle),
             }}
-            onPointerDown={(e) => onHandlePointerDown(e, handle)}
+            onPointerDown={e => onHandlePointerDown(e, handle)}
           >
             <span
               aria-hidden="true"
@@ -174,9 +168,7 @@ export function SelectionBoundsOverlay({
         width: bounds.width,
         height: bounds.height,
         border: `${borderWidth}px ${dashed ? 'dashed' : 'solid'} ${SELECT_ACCENT}`,
-        background: fill
-          ? `color-mix(in srgb, ${SELECT_ACCENT} 12%, transparent)`
-          : 'transparent',
+        background: fill ? `color-mix(in srgb, ${SELECT_ACCENT} 12%, transparent)` : 'transparent',
         boxShadow: dashed
           ? undefined
           : `0 0 0 ${1 / screenScale}px color-mix(in srgb, ${SELECT_ACCENT} 18%, transparent)`,
