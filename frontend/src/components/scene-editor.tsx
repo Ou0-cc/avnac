@@ -1936,6 +1936,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
         const targetEl = e.target as HTMLElement | null
         const clickedObject = targetEl?.closest?.('[data-avnac-scene-object]')
         const clickedPage = targetEl?.closest?.('[data-avnac-page-id]')
+        const clickedPageId = clickedPage?.getAttribute('data-avnac-page-id') ?? null
         const pt = pointerToScene(e.clientX, e.clientY)
         setContextMenu({
           x: e.clientX,
@@ -1943,6 +1944,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
           sceneX: pt.x,
           sceneY: pt.y,
           hasSelection: selectedIds.length > 0,
+          pageId: clickedPageId,
           showPageActions: Boolean(clickedPage) && !clickedObject,
           locked: elementToolbarLockedDisplay,
         })
@@ -2068,7 +2070,19 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(
             targetPage.id === prev.activePageId
               ? fallbackPage.id
               : prev.activePageId
-          return activateAvnacPage({ ...prev, pages: nextPages }, nextActivePageId)
+          const activePage =
+            nextPages.find((page) => page.id === nextActivePageId) ?? fallbackPage
+          return activateAvnacPage(
+            {
+              ...prev,
+              artboard: { ...activePage.artboard },
+              bg: activePage.bg,
+              objects: activePage.objects,
+              activePageId: nextActivePageId,
+              pages: nextPages,
+            },
+            nextActivePageId,
+          )
         })
         setDeletingPageIds((current) => current.filter((id) => id !== targetPageId))
       }, PAGE_DELETE_EXIT_MS)
