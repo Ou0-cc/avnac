@@ -6,7 +6,7 @@ import {
   useContext,
 } from 'react'
 
-import type { SceneObject, SceneText } from '../../lib/avnac-scene'
+import type { SceneImage, SceneObject, SceneText } from '../../lib/avnac-scene'
 import type { MarqueeRect, ResizeHandleId, SceneSnapGuide } from '../../scene-engine/primitives'
 import type { CanvasAlignKind } from '../canvas-element-toolbar'
 
@@ -65,6 +65,10 @@ export type CanvasStageContextValue = {
     elementToolbarLockedDisplay: boolean
     hasObjectSelected: boolean
     marqueeRect: MarqueeRect | null
+    imageRemovalEffect: {
+      object: SceneImage
+      phase: 'running' | 'success'
+    } | null
     ready: boolean
     scale: number
     selectedObjects: SceneObject[]
