@@ -31,6 +31,7 @@ type SelectionToolbarState = {
   elementToolbarLockedDisplay: boolean
   hasObjectSelected: boolean
   imageCornerToolbar: SelectionImageCornerToolbar | null
+  imageRemovalState: 'idle' | 'running' | 'success'
   ready: boolean
   selectionEffectsFooterSlot: ReactNode
   shapeToolbarModel: SelectionShapeToolbarModel | null
@@ -51,6 +52,7 @@ type SelectionToolbarActions = {
   onArtboardResize: (width: number, height: number) => void
   onTextFormatChange: (next: Partial<TextFormatToolbarValues>) => void
   openImageCropModal: () => void
+  removeImageBackground: () => void
   toggleBackgroundPopover: () => void
 }
 
