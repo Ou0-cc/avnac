@@ -2,32 +2,14 @@ import { isIP } from 'node:net'
 import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
 import { HttpError } from '../lib/http'
+import { isSupportedRembgModel, type RembgModel } from '../lib/rembg'
 
 const IMAGE_ACCEPT_HEADER = 'image/*,*/*;q=0.8'
 const DEFAULT_IMAGE_FILENAME = 'image.png'
-const REMBG_MODELS = [
-  'birefnet-general',
-  'birefnet-general-lite',
-  'birefnet-portrait',
-  'birefnet-dis',
-  'birefnet-hrsod',
-  'birefnet-cod',
-  'birefnet-massive',
-  'isnet-anime',
-  'dis_custom',
-  'isnet-general-use',
-  'sam',
-  'silueta',
-  'u2net_cloth_seg',
-  'u2net_custom',
-  'u2net_human_seg',
-  'u2net',
-  'u2netp',
-  'bria-rmbg',
-  'ben_custom',
-] as const
-
-type RembgModel = (typeof REMBG_MODELS)[number]
+const REMBG_RETRY_ATTEMPTS = 2
+const REMBG_READY_CHECK_INTERVAL_MS = 500
+const REMBG_READY_TIMEOUT_MS = 20_000
+const REMBG_HEALTH_TIMEOUT_MS = 2_000
 
 type RemoveBackgroundOptions = {
   a?: boolean
@@ -47,6 +29,8 @@ type RemoveBackgroundInput = {
   filename: string
   options: RemoveBackgroundOptions
 }
+
+let rembgRequestQueue: Promise<void> = Promise.resolve()
 
 function isBlockedHostname(hostname: string): boolean {
   const host = hostname.trim().toLowerCase()
@@ -151,8 +135,92 @@ function rembgRemoveUrl(): URL {
   return new URL('/api/remove', baseUrl)
 }
 
+function rembgHealthUrl(): URL {
+  const baseUrl = env.REMBG_URL
+  if (!baseUrl) {
+    throw new HttpError(503, 'Background removal is not configured (set REMBG_URL on the server).')
+  }
+
+  return new URL('/api', baseUrl)
+}
+
 function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function waitForRembgReady(maxWaitMs: number): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs
+  const url = rembgHealthUrl()
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(REMBG_HEALTH_TIMEOUT_MS),
+      })
+      if (response.ok) {
+        return true
+      }
+    } catch {
+      // Ignore transient startup errors while the service is restarting.
+    }
+
+    await delay(REMBG_READY_CHECK_INTERVAL_MS)
+  }
+
+  return false
+}
+
+async function withRembgRequestSlot<T>(task: () => Promise<T>): Promise<T> {
+  const previous = rembgRequestQueue
+  let release!: () => void
+  rembgRequestQueue = new Promise(resolve => {
+    release = resolve
+  })
+
+  await previous.catch(() => {})
+
+  try {
+    return await task()
+  } finally {
+    release()
+  }
+}
+
+function buildRembgFormData(input: RemoveBackgroundInput): FormData {
+  const form = new FormData()
+  form.set(
+    'file',
+    new File([input.body], input.filename, {
+      type: input.contentType,
+    }),
+  )
+  form.set('model', input.options.model ?? env.REMBG_DEFAULT_MODEL)
+  if (input.options.a !== undefined) {
+    form.set('a', String(input.options.a))
+  }
+  if (input.options.ab !== undefined) {
+    form.set('ab', String(input.options.ab))
+  }
+  if (input.options.ae !== undefined) {
+    form.set('ae', String(input.options.ae))
+  }
+  if (input.options.af !== undefined) {
+    form.set('af', String(input.options.af))
+  }
+  if (input.options.om !== undefined) {
+    form.set('om', String(input.options.om))
+  }
+  if (input.options.ppm !== undefined) {
+    form.set('ppm', String(input.options.ppm))
+  }
+
+  return form
 }
 
 function basenameFromPathname(pathname: string): string {
@@ -178,10 +246,6 @@ function outputFilename(filename: string): string {
   if (!trimmed) return 'image-no-bg.png'
   const normalized = trimmed.replace(/\.[^.]+$/, '').replace(/["\\/\r\n]+/g, '-')
   return `${normalized || 'image'}-no-bg.png`
-}
-
-function isSupportedRembgModel(value: string): value is RembgModel {
-  return REMBG_MODELS.includes(value as RembgModel)
 }
 
 function readTrimmedString(value: unknown): string | undefined {
@@ -270,7 +334,9 @@ function parseRemoveBackgroundOptionsFromRecord(
   }
 }
 
-function parseRemoveBackgroundOptionsFromJson(body: Record<string, unknown>): RemoveBackgroundOptions {
+function parseRemoveBackgroundOptionsFromJson(
+  body: Record<string, unknown>,
+): RemoveBackgroundOptions {
   return parseRemoveBackgroundOptionsFromRecord(key => body[key])
 }
 
@@ -389,67 +455,64 @@ async function removeBackground(input: RemoveBackgroundInput): Promise<Response>
     url.searchParams.set('extras', input.options.extras)
   }
 
-  const form = new FormData()
-  form.set(
-    'file',
-    new File([input.body], input.filename, {
-      type: input.contentType,
-    }),
-  )
-  if (input.options.model) {
-    form.set('model', input.options.model)
-  }
-  if (input.options.a !== undefined) {
-    form.set('a', String(input.options.a))
-  }
-  if (input.options.ab !== undefined) {
-    form.set('ab', String(input.options.ab))
-  }
-  if (input.options.ae !== undefined) {
-    form.set('ae', String(input.options.ae))
-  }
-  if (input.options.af !== undefined) {
-    form.set('af', String(input.options.af))
-  }
-  if (input.options.om !== undefined) {
-    form.set('om', String(input.options.om))
-  }
-  if (input.options.ppm !== undefined) {
-    form.set('ppm', String(input.options.ppm))
-  }
+  return withRembgRequestSlot(async () => {
+    let upstream: Response | null = null
 
-  let upstream: Response
-  try {
-    upstream = await fetch(url, {
-      method: 'POST',
-      body: form,
-      signal: AbortSignal.timeout(env.REMBG_TIMEOUT_MS),
+    for (let attempt = 0; attempt < REMBG_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        upstream = await fetch(url, {
+          method: 'POST',
+          body: buildRembgFormData(input),
+          signal: AbortSignal.timeout(env.REMBG_TIMEOUT_MS),
+        })
+      } catch (error) {
+        if (error instanceof HttpError) {
+          throw error
+        }
+        if (isTimeoutError(error)) {
+          throw new HttpError(504, 'Background removal timed out.')
+        }
+        if (attempt + 1 >= REMBG_RETRY_ATTEMPTS) {
+          throw new HttpError(502, 'Could not reach the background removal service.')
+        }
+        const ready = await waitForRembgReady(REMBG_READY_TIMEOUT_MS)
+        if (!ready) {
+          throw new HttpError(502, 'Could not reach the background removal service.')
+        }
+        continue
+      }
+
+      if (upstream.ok) {
+        break
+      }
+
+      if (upstream.status >= 500 && attempt + 1 < REMBG_RETRY_ATTEMPTS) {
+        const ready = await waitForRembgReady(REMBG_READY_TIMEOUT_MS)
+        if (ready) {
+          upstream = null
+          continue
+        }
+      }
+
+      throw new HttpError(502, `Background removal failed (${upstream.status}).`)
+    }
+
+    if (!upstream || !upstream.ok) {
+      throw new HttpError(502, 'Could not reach the background removal service.')
+    }
+
+    const body = await upstream.arrayBuffer()
+    const contentType = trimContentType(upstream.headers.get('content-type'))
+
+    return new Response(body, {
+      headers: {
+        'cache-control': 'no-store',
+        'content-disposition': `inline; filename="${outputFilename(input.filename)}"`,
+        'content-length': String(body.byteLength),
+        'content-type': contentType || 'image/png',
+        'x-content-type-options': 'nosniff',
+      },
     })
-  } catch (error) {
-    if (error instanceof HttpError) {
-      throw error
-    }
-    if (isTimeoutError(error)) {
-      throw new HttpError(504, 'Background removal timed out.')
-    }
-    throw new HttpError(502, 'Could not reach the background removal service.')
-  }
-
-  if (!upstream.ok) {
-    throw new HttpError(502, `Background removal failed (${upstream.status}).`)
-  }
-
-  const body = await upstream.arrayBuffer()
-  const contentType = trimContentType(upstream.headers.get('content-type'))
-
-  return new Response(body, {
-    headers: {
-      'cache-control': 'no-store',
-      'content-disposition': `inline; filename="${outputFilename(input.filename)}"`,
-      'content-length': String(body.byteLength),
-      'content-type': contentType || 'image/png',
-      'x-content-type-options': 'nosniff',
-    },
   })
 }
 
