@@ -12,7 +12,10 @@ RUN apt-get update && \
 RUN pip install --upgrade pip && \
     pip install "rembg[cpu,cli]==2.0.75"
 
+COPY entrypoint.sh /usr/local/bin/rembg-entrypoint
+RUN chmod +x /usr/local/bin/rembg-entrypoint
+
 EXPOSE 7000
 
-ENTRYPOINT ["rembg"]
+ENTRYPOINT ["rembg-entrypoint"]
 CMD ["s", "--host", "0.0.0.0", "--port", "7000", "--log_level", "info", "--no-ui"]
