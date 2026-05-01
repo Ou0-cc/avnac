@@ -1,6 +1,6 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 
-import type { SceneObject } from '../../lib/avnac-scene'
+import type { SceneImage, SceneObject } from '../../lib/avnac-scene'
 import {
   cursorForHandle,
   RESIZE_HANDLES,
@@ -9,6 +9,38 @@ import {
 } from '../../scene-engine/primitives'
 
 const SELECT_ACCENT = 'var(--accent)'
+
+export function ImageRemovalOverlay({
+  object,
+  phase,
+}: {
+  object: SceneImage
+  phase: 'running' | 'success'
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute z-[20]"
+      style={{
+        left: object.x,
+        top: object.y,
+        width: object.width,
+        height: object.height,
+        transform: `rotate(${object.rotation}deg)`,
+        transformOrigin: 'center center',
+      }}
+    >
+      <div
+        className="avnac-remove-bg-overlay absolute inset-0 overflow-hidden"
+        data-phase={phase}
+        style={{ borderRadius: object.cornerRadius }}
+      >
+        <div className="avnac-remove-bg-overlay__wash" />
+        <div className="avnac-remove-bg-overlay__beam" />
+        <div className="avnac-remove-bg-overlay__edge" />
+      </div>
+    </div>
+  )
+}
 
 export function SelectionOverlay({
   object,
