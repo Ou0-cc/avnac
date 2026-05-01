@@ -1,4 +1,4 @@
-import { CropIcon } from '@hugeicons/core-free-icons'
+import { AiMagicIcon, CropIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 
 import ArtboardResizeToolbarControl from '../artboard-resize-toolbar-control'
@@ -39,6 +39,7 @@ export function EditorSelectionToolbar() {
     onArtboardResize,
     onTextFormatChange,
     openImageCropModal,
+    removeImageBackground,
     toggleBackgroundPopover,
   } = actions
   const { backgroundPopoverAnchorRef, backgroundPopoverPanelRef, selectionToolsRef, viewportRef } =
@@ -51,6 +52,7 @@ export function EditorSelectionToolbar() {
     elementToolbarLockedDisplay,
     hasObjectSelected,
     imageCornerToolbar,
+    imageRemovalState,
     ready,
     selectionEffectsFooterSlot,
     shapeToolbarModel,
@@ -121,6 +123,28 @@ export function EditorSelectionToolbar() {
                   >
                     <HugeiconsIcon icon={CropIcon} size={20} strokeWidth={1.75} />
                   </button>
+                  <button
+                    type="button"
+                    disabled={elementToolbarLockedDisplay || imageRemovalState === 'running'}
+                    className={[
+                      floatingToolbarIconButton(imageRemovalState !== 'idle', { wide: true }),
+                      'gap-1.5 px-2.5 text-[13px] font-medium',
+                      elementToolbarLockedDisplay ? 'pointer-events-none opacity-40' : '',
+                    ].join(' ')}
+                    onClick={removeImageBackground}
+                    aria-label="Remove background"
+                    title="Remove background"
+                  >
+                    <HugeiconsIcon icon={AiMagicIcon} size={18} strokeWidth={1.75} />
+                    <span>
+                      {imageRemovalState === 'running'
+                        ? 'Removing…'
+                        : imageRemovalState === 'success'
+                          ? 'Removed'
+                          : 'Remove bg'}
+                    </span>
+                  </button>
+                  <FloatingToolbarDivider />
                   <CornerRadiusToolbarControl
                     value={imageCornerToolbar.radius}
                     max={imageCornerToolbar.max}
