@@ -30,7 +30,7 @@ const config = defineConfig(({ mode }) => {
     `[icons] ${hasHugeiconsPro ? 'Hugeicons Pro detected' : 'Hugeicons Pro not installed; using free fallback'}`,
   )
   return {
-    base: '/avnac/',
+    base: "/avnac/",
     resolve: {
       tsconfigPaths: true,
       alias: [
@@ -63,7 +63,7 @@ const config = defineConfig(({ mode }) => {
         // Mirrors production: Vercel mounts the backend at /api (vercel.json).
         // Browser uses same-origin /api; only the dev server proxies to localhost.
         "/api": {
-          target: "http://localhost:3001",
+          target: "/avnac/api/",
           changeOrigin: true,
           rewrite: (path: string) => path.replace(/^\/api/, ''),
         },

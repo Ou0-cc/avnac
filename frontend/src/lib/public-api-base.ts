@@ -16,5 +16,5 @@ export function getPublicApiBase(): string {
   const raw = import.meta.env.VITE_PUBLIC_API_URL as string | undefined
   const trimmed = raw?.trim()
   if (trimmed) return trimmed.replace(/\/$/, '')
-  return '/api'
+  return './api'
 }

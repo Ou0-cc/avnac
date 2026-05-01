@@ -3,14 +3,14 @@ import { Outlet, createRootRoute } from "@tanstack/react-router";
 // import posthog from "posthog-js";
 import { init } from '@plausible-analytics/tracker'
 
-import NativeTitleTooltip from '../components/native-title-tooltip'
+import NativeTitleTooltip from "../components/native-title-tooltip";
 
 init({
   domain: 'ou0.cc',
   endpoint: 'https://plausible.canine.tools/api/event',
   captureOnLocalhost: false,
   outboundLinks: true,
-  hashBasedRouting: true,
+  hashBasedRouting: false,
 });
 
 export const Route = createRootRoute({
