@@ -14,6 +14,7 @@ import {
 import { createPortal } from 'react-dom'
 import { useStore } from 'zustand'
 import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
+import { removeBackgroundFromSceneImage } from '../lib/avnac-background-removal'
 import { loadImageMetadata } from '../lib/avnac-image-proxy'
 import {
   AVNAC_DOC_VERSION,
@@ -213,6 +214,21 @@ function pageExportDocument(doc: AvnacDocument, page: AvnacPage): AvnacDocument 
   }
 }
 
+function clampImageCropToFitNaturalSize(
+  image: SceneImage,
+  naturalWidth: number,
+  naturalHeight: number,
+): SceneImage['crop'] {
+  const width = Math.max(1, Math.min(image.crop.width || naturalWidth, naturalWidth))
+  const height = Math.max(1, Math.min(image.crop.height || naturalHeight, naturalHeight))
+  return {
+    x: Math.max(0, Math.min(image.crop.x || 0, naturalWidth - width)),
+    y: Math.max(0, Math.min(image.crop.y || 0, naturalHeight - height)),
+    width,
+    height,
+  }
+}
+
 async function dataUrlToBytes(url: string): Promise<Uint8Array> {
   const res = await fetch(url)
   if (!res.ok) throw new Error('Could not read exported image.')
@@ -404,6 +420,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
   const dragStateRef = useRef<DragState | null>(null)
   const autosaveTimerRef = useRef<number | null>(null)
   const historyTimerRef = useRef<number | null>(null)
+  const imageRemovalSuccessTimerRef = useRef<number | null>(null)
   const snapGuideXRef = useRef<number | null>(null)
   const snapGuideYRef = useRef<number | null>(null)
   const editorStoreRef = useRef<EditorStoreApi | null>(null)
@@ -447,6 +464,10 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
   const [textDraft, setTextDraft] = useState('')
   const [backgroundActive, setBackgroundActive] = useState(false)
   const [backgroundHovered, setBackgroundHovered] = useState(false)
+  const [imageRemovalFx, setImageRemovalFx] = useState<{
+    phase: 'running' | 'success'
+    targetId: string
+  } | null>(null)
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null)
   const [snapGuides, setSnapGuides] = useState<SceneSnapGuide[]>([])
   const [, setSelectionRev] = useState(0)
@@ -560,6 +581,9 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
         window.clearTimeout(timer)
       })
       deletePageTimersRef.current.clear()
+      if (imageRemovalSuccessTimerRef.current !== null) {
+        window.clearTimeout(imageRemovalSuccessTimerRef.current)
+      }
     }
   }, [])
 
@@ -675,6 +699,17 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
   const elementToolbarCanGroup = selectedObjects.length >= 2
   const elementToolbarCanAlignElements = selectedObjects.length >= 2
   const elementToolbarCanUngroup = selectedSingle?.type === 'group' && !selectedSingle.locked
+  const imageRemovalState: 'idle' | 'running' | 'success' =
+    selectedSingle?.type === 'image' && imageRemovalFx?.targetId === selectedSingle.id
+      ? imageRemovalFx.phase
+      : 'idle'
+  const imageRemovalEffect =
+    selectedSingle?.type === 'image' && imageRemovalFx?.targetId === selectedSingle.id
+      ? {
+          object: selectedSingle,
+          phase: imageRemovalFx.phase,
+        }
+      : null
 
   const nudgeSelection = useCallback(
     (dx: number, dy: number) => {
@@ -1382,6 +1417,65 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
     })
     setImageCropOpen(true)
   }, [selectedSingle])
+
+  const removeImageBackground = useCallback(() => {
+    if (!selectedSingle || selectedSingle.type !== 'image' || selectedSingle.locked) return
+    if (imageRemovalFx?.phase === 'running') return
+
+    const targetImage = selectedSingle
+    setExportError(null)
+    if (imageRemovalSuccessTimerRef.current !== null) {
+      window.clearTimeout(imageRemovalSuccessTimerRef.current)
+      imageRemovalSuccessTimerRef.current = null
+    }
+    setImageRemovalFx({
+      targetId: targetImage.id,
+      phase: 'running',
+    })
+
+    void (async () => {
+      try {
+        const nextImage = await removeBackgroundFromSceneImage(targetImage)
+        setDoc(prev => ({
+          ...prev,
+          objects: prev.objects.map(obj =>
+            obj.id === targetImage.id && obj.type === 'image'
+              ? {
+                  ...obj,
+                  src: nextImage.src,
+                  naturalWidth: nextImage.naturalWidth,
+                  naturalHeight: nextImage.naturalHeight,
+                  crop: clampImageCropToFitNaturalSize(
+                    obj,
+                    nextImage.naturalWidth,
+                    nextImage.naturalHeight,
+                  ),
+                }
+              : obj,
+          ),
+        }))
+        setImageRemovalFx(current =>
+          current?.targetId === targetImage.id
+            ? {
+                targetId: targetImage.id,
+                phase: 'success',
+              }
+            : current,
+        )
+        imageRemovalSuccessTimerRef.current = window.setTimeout(() => {
+          setImageRemovalFx(current => (current?.targetId === targetImage.id ? null : current))
+          imageRemovalSuccessTimerRef.current = null
+        }, 900)
+      } catch (error) {
+        setImageRemovalFx(current => (current?.targetId === targetImage.id ? null : current))
+        setExportError(
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : 'Could not remove the background.',
+        )
+      }
+    })()
+  }, [imageRemovalFx?.phase, selectedSingle, setDoc])
 
   const applyImageCropFromModal = useCallback((rect: ImageCropModalApplyPayload) => {
     const targetId = imageCropTargetIdRef.current
@@ -2390,6 +2484,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
       onArtboardResize,
       onTextFormatChange,
       openImageCropModal,
+      removeImageBackground,
       toggleBackgroundPopover: () => setBgPopoverOpen(open => !open),
     },
     refs: {
@@ -2406,6 +2501,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
       elementToolbarLockedDisplay,
       hasObjectSelected,
       imageCornerToolbar,
+      imageRemovalState,
       ready,
       selectionEffectsFooterSlot,
       shapeToolbarModel,
@@ -2468,6 +2564,7 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
       elementToolbarLayout,
       elementToolbarLockedDisplay,
       hasObjectSelected,
+      imageRemovalEffect,
       marqueeRect,
       ready,
       scale,
