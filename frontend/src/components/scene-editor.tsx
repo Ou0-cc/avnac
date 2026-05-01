@@ -142,6 +142,10 @@ const DEFAULT_FILL: BgValue = { type: 'solid', color: '#262626' }
 const DEFAULT_STROKE: BgValue = { type: 'solid', color: 'transparent' }
 const DEFAULT_LINE_STROKE: BgValue = { type: 'solid', color: '#262626' }
 
+function isPointerOnSceneObject(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest('[data-avnac-scene-object]')
+}
+
 export type SceneEditorHandle = {
   exportImage: (opts?: ExportImageOptions) => void
   saveDocument: () => void
@@ -521,6 +525,12 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
       setBgPopoverOpen(false)
     }
   }, [backgroundActive, bgPopoverOpen, hasObjectSelected])
+
+  useEffect(() => {
+    if (hasObjectSelected && backgroundActive) {
+      setBackgroundActive(false)
+    }
+  }, [backgroundActive, hasObjectSelected])
 
   const fitZoom = useCallback(() => {
     const viewport = viewportRef.current
@@ -2162,12 +2172,12 @@ const SceneEditor = forwardRef<SceneEditorHandle, SceneEditorProps>(function Sce
     [commitTextDraft, setHoveredId, setSelectedIds, textEditingId],
   )
 
-  const onArtboardPointerEnter = useCallback(() => {
-    setBackgroundHovered(true)
+  const onArtboardPointerEnter = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    setBackgroundHovered(!isPointerOnSceneObject(e.target))
   }, [])
 
-  const onArtboardPointerMove = useCallback(() => {
-    setBackgroundHovered(true)
+  const onArtboardPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    setBackgroundHovered(!isPointerOnSceneObject(e.target))
   }, [])
 
   const onArtboardPointerLeave = useCallback(() => {
