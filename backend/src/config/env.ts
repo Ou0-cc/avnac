@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { DEFAULT_REMBG_MODEL, REMBG_MODELS } from '../lib/rembg'
 import { getRuntimeEnv } from './runtime-env'
 
 const optionalNonEmptyString = z.preprocess(
@@ -28,6 +29,7 @@ const envSchema = z.object({
     .transform(value => value.toUpperCase())
     .default('NGN'),
   REMBG_URL: optionalUrl,
+  REMBG_DEFAULT_MODEL: z.enum(REMBG_MODELS).default(DEFAULT_REMBG_MODEL),
   REMBG_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
   REMBG_MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(20_000_000),
 })
