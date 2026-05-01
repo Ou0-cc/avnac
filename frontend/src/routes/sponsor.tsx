@@ -230,12 +230,13 @@ function SponsorPage() {
     setCheckoutState({ mode: input.mode, error: null })
 
     try {
+      const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '')
       const { checkoutUrl } = await createSponsorCheckout({
         mode: input.mode,
         email,
         amount,
         interval: input.interval,
-        returnUrl: `${window.location.origin}/sponsor`,
+        returnUrl: new URL(`${base}/sponsor`, window.location.origin).toString(),
       })
       window.location.assign(checkoutUrl)
       return

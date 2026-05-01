@@ -60,7 +60,8 @@ export default function FileGridCard({
       return
     }
     posthog.capture('file_opened', { file_id: row.id, method: 'new_tab' })
-    const u = new URL('/create', window.location.origin)
+    const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '')
+    const u = new URL(`${base}/create`, window.location.origin)
     u.searchParams.set('id', row.id)
     window.open(u.toString(), '_blank', 'noopener,noreferrer')
   }
