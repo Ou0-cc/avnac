@@ -7,7 +7,12 @@ import CanvasElementToolbar, { type CanvasAlignKind } from '../canvas-element-to
 import { useCanvasStageContext } from './canvas-stage-context'
 import { useEditorStore } from './editor-store'
 import { SceneObjectView } from './object-view'
-import { SelectionBoundsOverlay, SelectionOverlay, SnapGuidesOverlay } from './selection-overlays'
+import {
+  ImageRemovalOverlay,
+  SelectionBoundsOverlay,
+  SelectionOverlay,
+  SnapGuidesOverlay,
+} from './selection-overlays'
 import { useVectorBoardControlsContext } from './use-vector-board-controls'
 
 const EMPTY_ALIGN_STATE: Record<CanvasAlignKind, boolean> = {
@@ -121,6 +126,7 @@ export function CanvasStage() {
     elementToolbarLayout,
     elementToolbarLockedDisplay,
     hasObjectSelected,
+    imageRemovalEffect,
     marqueeRect,
     ready,
     scale,
@@ -297,6 +303,12 @@ export function CanvasStage() {
                       ) : null}
                       {selectedObjects.length > 1 && selectionBounds ? (
                         <SelectionBoundsOverlay bounds={selectionBounds} scale={scale} />
+                      ) : null}
+                      {imageRemovalEffect ? (
+                        <ImageRemovalOverlay
+                          object={imageRemovalEffect.object}
+                          phase={imageRemovalEffect.phase}
+                        />
                       ) : null}
                       {marqueeRect && (marqueeRect.width > 0 || marqueeRect.height > 0) ? (
                         <SelectionBoundsOverlay bounds={marqueeRect} scale={scale} dashed fill />
