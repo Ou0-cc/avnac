@@ -39,7 +39,7 @@ const downloadLinks = [
   },
   {
     id: 'macos-arm',
-    label: 'macOS',
+    label: 'macOS (Apple Silicon)',
     title: 'Arm64 DMG',
     body: 'Optimized for Apple Silicon Macs (M1/M2/M3).',
     href: 'https://github.com/striker561/Avnac-Studio/releases/latest/download/avnac-studio-macos-arm64.dmg',
@@ -48,7 +48,7 @@ const downloadLinks = [
   },
   {
     id: 'macos-intel',
-    label: 'macOS Intel',
+    label: 'macOS (Intel)',
     title: 'Intel DMG',
     body: 'Native build for x86_64 Intel-based Macs.',
     href: 'https://github.com/striker561/Avnac-Studio/releases/latest/download/avnac-studio-macos-amd64.dmg',
@@ -82,13 +82,15 @@ const bentoFeatures = [
   {
     eyebrow: 'Projects',
     title: 'Keep your files on your computer.',
-    description: 'Studio stores work in a local app folder, so your projects are not tied to browser storage alone.',
+    description:
+      'Studio stores work in a local app folder, so your projects are not tied to browser storage alone.',
     icon: PackageIcon,
   },
   {
     eyebrow: 'Workflow',
     title: 'Use the familiar canvas.',
-    description: 'You still get the Avnac editing flow, but with native open, save, and export behavior.',
+    description:
+      'You still get the Avnac editing flow, but with native open, save, and export behavior.',
     icon: ComputerIcon,
   },
   {
@@ -110,7 +112,8 @@ const commandCards = [
     step: '01',
     title: 'Environment Setup',
     body: 'Wails depends on Go. Install and verify your Go installation first.',
-    command: 'brew install go # macOS\nwinget install GoLang.Go # Win\nsudo apt install golang-go # Linux',
+    command:
+      'brew install go # macOS\nwinget install GoLang.Go # Win\nsudo apt install golang-go # Linux',
     icon: PackageIcon,
   },
   {
@@ -130,7 +133,7 @@ const commandCards = [
   {
     step: 'Optional',
     title: 'Frontend Sandbox',
-    body: 'Run the UI independently if you don\'t need native desktop features.',
+    body: "Run the UI independently if you don't need native desktop features.",
     command: 'cd frontend\nnpm install\nnpm run dev',
     icon: GlobalIcon,
   },
@@ -148,7 +151,15 @@ function PlatformIcon({ icon: Icon, className }: { icon: any; className?: string
   )
 }
 
-function BentoCard({ feature, delay, className }: { feature: (typeof bentoFeatures)[0]; delay: number; className?: string }) {
+function BentoCard({
+  feature,
+  delay,
+  className,
+}: {
+  feature: (typeof bentoFeatures)[0]
+  delay: number
+  className?: string
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -165,9 +176,7 @@ function BentoCard({ feature, delay, className }: { feature: (typeof bentoFeatur
         {feature.eyebrow}
       </span>
       <h3 className="mb-2 text-xl font-bold tracking-tight">{feature.title}</h3>
-      <p className="text-sm leading-relaxed text-(--text-muted)">
-        {feature.description}
-      </p>
+      <p className="text-sm leading-relaxed text-(--text-muted)">{feature.description}</p>
     </motion.div>
   )
 }
@@ -179,12 +188,49 @@ function StudioPage() {
 
   useEffect(() => {
     const ua = window.navigator.userAgent.toLowerCase()
-    if (ua.includes('win')) setDetectedOS('windows')
-    else if (ua.includes('mac')) setDetectedOS('macos-arm')
-    else if (ua.includes('linux')) setDetectedOS('linux')
+
+    if (ua.includes('win')) {
+      setDetectedOS('windows')
+    } else if (ua.includes('linux')) {
+      setDetectedOS('linux')
+    } else if (ua.includes('mac')) {
+      // 1. Check for Arm in UA (some browsers show it)
+      if (ua.includes('arm64') || ua.includes('aarch64')) {
+        setDetectedOS('macos-arm')
+      }
+      // 2. WebGL Vendor check (reliable synchronous check for Apple Silicon)
+      else {
+        try {
+          const canvas = document.createElement('canvas')
+          const gl = canvas.getContext('webgl')
+          const debugInfo = gl?.getExtension('WEBGL_debug_renderer_info')
+          const renderer = debugInfo ? gl?.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : ''
+          if (renderer?.includes('Apple')) {
+            setDetectedOS('macos-arm')
+          } else {
+            setDetectedOS('macos-intel')
+          }
+        } catch (_) {
+          setDetectedOS('macos-intel') // Safe default for Mac
+        }
+      }
+
+      // 3. Async refinement for modern browsers (User-Agent Client Hints)
+      if ((navigator as any).userAgentData?.getHighEntropyValues) {
+        ;(navigator as any).userAgentData
+          .getHighEntropyValues(['architecture'])
+          .then((values: any) => {
+            if (values.architecture === 'arm') {
+              setDetectedOS('macos-arm')
+            } else if (values.architecture === 'x86') {
+              setDetectedOS('macos-intel')
+            }
+          })
+      }
+    }
   }, [])
 
-  const recommendedBuild = downloadLinks.find(link => link.id === detectedOS) || downloadLinks[1]
+  const recommendedBuild = downloadLinks.find(link => link.id === detectedOS)
 
   return (
     <main className="landing-page min-h-screen overflow-x-hidden pt-32 pb-32">
@@ -205,7 +251,6 @@ function StudioPage() {
       <div className="landing-container relative z-10 px-6">
         {/* Hero Section */}
         <section className="flex flex-col items-center text-center">
-
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -233,12 +278,14 @@ function StudioPage() {
           >
             <div className="flex flex-col items-center gap-6 w-full max-w-lg">
               <a
-                href={recommendedBuild.href}
+                href={recommendedBuild?.href || releasePageHref}
                 className="group relative flex w-full items-center justify-center gap-4 overflow-hidden rounded-3xl bg-black px-10 py-5 text-lg font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl"
               >
                 <div className="absolute inset-0 bg-gradient-to-tr from-white/15 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                 <HugeiconsIcon icon={Download01Icon} size={24} />
-                Download for {recommendedBuild.label}
+                {recommendedBuild
+                  ? `Download for ${recommendedBuild.label}`
+                  : 'Download Avnac Studio'}
               </a>
               <button
                 onClick={() => setShowAllPlatforms(!showAllPlatforms)}
@@ -263,7 +310,7 @@ function StudioPage() {
                     <a
                       key={link.id}
                       href={link.href}
-                      className={`glass-card flex flex-col items-start p-8 text-left transition-all hover:bg-white hover:shadow-2xl group ${link.id === recommendedBuild.id ? 'ring-2 ring-black/5' : ''}`}
+                      className={`glass-card flex flex-col items-start p-8 text-left transition-all hover:bg-white hover:shadow-2xl group ${link.id === recommendedBuild?.id ? 'ring-2 ring-black/5' : ''}`}
                     >
                       <PlatformIcon
                         icon={link.icon}
@@ -283,7 +330,6 @@ function StudioPage() {
               )}
             </AnimatePresence>
           </motion.div>
-
         </section>
 
         {/* Bento Grid Features */}
@@ -297,20 +343,16 @@ function StudioPage() {
 
           <div className="grid gap-6 md:grid-cols-3 md:grid-rows-[1fr_1fr_auto]">
             {/* Left: Large Card */}
-            <BentoCard 
-              feature={bentoFeatures[0]} 
-              delay={0.1} 
+            <BentoCard
+              feature={bentoFeatures[0]}
+              delay={0.1}
               className="md:col-span-2 md:row-span-2 justify-center"
             />
             {/* Right: Stacked small cards */}
             <BentoCard feature={bentoFeatures[1]} delay={0.2} />
             <BentoCard feature={bentoFeatures[2]} delay={0.3} />
             {/* Bottom: Spanning card */}
-            <BentoCard 
-              feature={bentoFeatures[3]} 
-              delay={0.4} 
-              className="md:col-span-3"
-            />
+            <BentoCard feature={bentoFeatures[3]} delay={0.4} className="md:col-span-3" />
           </div>
         </section>
 
@@ -336,13 +378,19 @@ function StudioPage() {
               </div>
               <h3 className="mb-4 text-3xl font-bold tracking-tight">Avnac Studio</h3>
               <p className="mb-10 text-lg leading-relaxed text-white/60">
-                The desktop native powerhouse. Optimized for local storage, offline work, and professional file management.
+                The desktop native powerhouse. Optimized for local storage, offline work, and
+                professional file management.
               </p>
-              
+
               <div className="mt-auto space-y-6">
-                {comparisonRows.map((row) => (
-                  <div key={row.label} className="flex items-center justify-between border-b border-white/10 pb-4">
-                    <span className="text-xs font-bold uppercase tracking-widest text-white/30">{row.label}</span>
+                {comparisonRows.map(row => (
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between border-b border-white/10 pb-4"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-widest text-white/30">
+                      {row.label}
+                    </span>
                     <span className="text-sm font-semibold">{row.studio}</span>
                   </div>
                 ))}
@@ -361,13 +409,19 @@ function StudioPage() {
               </div>
               <h3 className="mb-4 text-3xl font-bold tracking-tight">Avnac Web</h3>
               <p className="mb-10 text-lg leading-relaxed text-black/50">
-                Zero friction, anywhere access. The same powerful editor running directly in your browser.
+                Zero friction, anywhere access. The same powerful editor running directly in your
+                browser.
               </p>
 
               <div className="mt-auto space-y-6">
-                {comparisonRows.map((row) => (
-                  <div key={row.label} className="flex items-center justify-between border-b border-black/5 pb-4">
-                    <span className="text-xs font-bold uppercase tracking-widest text-black/20">{row.label}</span>
+                {comparisonRows.map(row => (
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between border-b border-black/5 pb-4"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-widest text-black/20">
+                      {row.label}
+                    </span>
                     <span className="text-sm font-semibold">{row.web}</span>
                   </div>
                 ))}
@@ -476,9 +530,7 @@ function StudioPage() {
                     <div className="h-px flex-1 bg-black/5" />
                   </div>
                   <h3 className="mb-2 text-xl font-bold tracking-tight">{card.title}</h3>
-                  <p className="text-sm leading-relaxed text-(--text-muted)">
-                    {card.body}
-                  </p>
+                  <p className="text-sm leading-relaxed text-(--text-muted)">{card.body}</p>
                 </div>
 
                 {/* Terminal Block */}
@@ -487,19 +539,43 @@ function StudioPage() {
                     <div className="size-2.5 rounded-full bg-white/10" />
                     <div className="size-2.5 rounded-full bg-white/10" />
                     <div className="size-2.5 rounded-full bg-white/10" />
-                    <span className="ml-4 text-[10px] font-bold uppercase tracking-widest text-white/20">terminal</span>
+                    <span className="ml-4 text-[10px] font-bold uppercase tracking-widest text-white/20">
+                      terminal
+                    </span>
                   </div>
                   <div className="p-6 font-mono text-[13px] leading-relaxed text-white/90">
                     {card.command.split('\n').map((line, lidx) => (
                       <div key={lidx} className="flex gap-4">
-                        <span className="w-4 shrink-0 text-white/20 text-right select-none">{lidx + 1}</span>
+                        <span className="w-4 shrink-0 text-white/20 text-right select-none">
+                          {lidx + 1}
+                        </span>
                         <span className="break-all whitespace-pre-wrap">
                           {line.split(' ').map((word, widx) => {
-                            if (word.startsWith('#')) return <span key={widx} className="text-white/30">{word} </span>
-                            if (word === 'brew' || word === 'winget' || word === 'sudo' || word === 'npm' || word === 'go' || word === 'wails') 
-                              return <span key={widx} className="text-blue-400">{word} </span>
-                            if (word === 'install' || word === 'run' || word === 'dev') 
-                              return <span key={widx} className="text-purple-400">{word} </span>
+                            if (word.startsWith('#'))
+                              return (
+                                <span key={widx} className="text-white/30">
+                                  {word}{' '}
+                                </span>
+                              )
+                            if (
+                              word === 'brew' ||
+                              word === 'winget' ||
+                              word === 'sudo' ||
+                              word === 'npm' ||
+                              word === 'go' ||
+                              word === 'wails'
+                            )
+                              return (
+                                <span key={widx} className="text-blue-400">
+                                  {word}{' '}
+                                </span>
+                              )
+                            if (word === 'install' || word === 'run' || word === 'dev')
+                              return (
+                                <span key={widx} className="text-purple-400">
+                                  {word}{' '}
+                                </span>
+                              )
                             return <span key={widx}>{word} </span>
                           })}
                         </span>
@@ -555,7 +631,7 @@ function StudioPage() {
 
             <div className="relative flex flex-wrap justify-center gap-6">
               <a
-                href={recommendedBuild.href}
+                href={recommendedBuild?.href || releasePageHref}
                 className="rounded-[2rem] bg-black px-14 py-7 text-xl font-bold text-white shadow-[0_20px_50px_-10px_rgba(0,0,0,0.3)] transition-all hover:scale-105 active:scale-95"
               >
                 Download Now
@@ -610,8 +686,22 @@ function StudioPage() {
               and is not maintained by the upstream Avnac project.
             </p>
             <div className="mt-6 flex justify-center gap-6">
-              <a href="https://x.com/insigdev" target="_blank" rel="noreferrer" className="text-xs font-bold text-black/60 hover:text-black transition-colors">𝕏 @insigdev</a>
-              <a href="https://x.com/d3uc3y" target="_blank" rel="noreferrer" className="text-xs font-bold text-black/60 hover:text-black transition-colors">𝕏 @d3uc3y</a>
+              <a
+                href="https://x.com/insigdev"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-bold text-black/60 hover:text-black transition-colors"
+              >
+                𝕏 @insigdev
+              </a>
+              <a
+                href="https://x.com/d3uc3y"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-bold text-black/60 hover:text-black transition-colors"
+              >
+                𝕏 @d3uc3y
+              </a>
             </div>
           </motion.div>
           <div className="mt-12 text-center text-[10px] font-bold uppercase tracking-[0.2em] opacity-20">
