@@ -1,42 +1,35 @@
 import {
   AppleIcon,
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  CheckmarkCircle02Icon,
   CommandLineIcon,
   ComputerIcon,
   Download01Icon,
   GithubIcon,
+  GlobalIcon,
+  PackageIcon,
+  Shield01Icon,
   WindowsNewIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { createFileRoute } from '@tanstack/react-router'
+import { AnimatePresence, motion } from 'motion/react'
+import { useEffect, useState } from 'react'
 
 export const Route = createFileRoute('/studio')({
   component: StudioPage,
 })
 
-const primaryButtonClass =
-  'landing-primary-button inline-flex min-h-12 items-center justify-center rounded-full px-8 py-3.5 text-base font-medium no-underline sm:min-h-14 sm:px-10 sm:py-4 sm:text-[1.0625rem]'
-
-const secondaryButtonClass =
-  'inline-flex min-h-12 items-center justify-center rounded-full border border-black/14 bg-white/78 px-8 py-3.5 text-base font-medium text-(--text) no-underline backdrop-blur-sm hover:border-black/22 hover:bg-white sm:min-h-14 sm:px-10 sm:py-4 sm:text-[1.0625rem]'
-
-const textLinkClass =
-  'font-medium text-(--text) underline decoration-black/15 underline-offset-4 transition-colors hover:text-black'
-
-const sectionLabelClass = 'text-xs font-bold uppercase tracking-[0.12em] text-(--text-subtle)'
-
-const sectionLabelInverseClass = 'text-xs font-bold uppercase tracking-[0.12em] text-dark/80'
+// --- Constants & Data ---
 
 const releasePageHref = 'https://github.com/striker561/Avnac-Studio/releases/latest'
-
 const studioRepoHref = 'https://github.com/striker561/Avnac-Studio'
-
 const studioBranchHref = 'https://github.com/striker561/Avnac-Studio/tree/studio'
-
-const striker561TwitterHref = 'https://twitter.com/insigdev'
-const d3uceyTwitterHref = 'https://twitter.com/d3uc3y'
 
 const downloadLinks = [
   {
+    id: 'windows',
     label: 'Windows',
     title: 'Windows installer',
     body: 'One-click installer for the latest desktop release.',
@@ -45,73 +38,39 @@ const downloadLinks = [
     badge: 'Latest',
   },
   {
+    id: 'macos-arm',
     label: 'macOS',
     title: 'Arm64 DMG',
-    body: 'Apple Silicon Macs.',
+    body: 'Optimized for Apple Silicon Macs (M1/M2/M3).',
     href: 'https://github.com/striker561/Avnac-Studio/releases/latest/download/avnac-studio-macos-arm64.dmg',
     icon: AppleIcon,
     badge: 'Recommended',
   },
   {
+    id: 'macos-intel',
     label: 'macOS Intel',
     title: 'Intel DMG',
-    body: 'Separate build for x86_64 Macs.',
+    body: 'Native build for x86_64 Intel-based Macs.',
     href: 'https://github.com/striker561/Avnac-Studio/releases/latest/download/avnac-studio-macos-amd64.dmg',
     icon: AppleIcon,
     badge: 'Intel only',
   },
   {
+    id: 'linux',
     label: 'Linux',
     title: 'amd64 binary',
-    body: 'Portable Linux binary from the latest release.',
+    body: 'Portable binary for common Linux distributions.',
     href: 'https://github.com/striker561/Avnac-Studio/releases/latest/download/avnac-studio-linux-amd64',
     icon: CommandLineIcon,
     badge: 'Portable',
   },
 ] as const
 
-const heroHighlights = [
-  {
-    eyebrow: 'Latest builds',
-    title: 'Windows, macOS, and Linux',
-    body: 'This page points to the newest published Studio release.',
-    icon: Download01Icon,
-  },
-  {
-    eyebrow: 'Local workflow',
-    title: 'Native open, save, and export',
-    body: 'Keep projects on your machine instead of relying on browser-only storage.',
-    icon: ComputerIcon,
-  },
-  {
-    eyebrow: 'Independent',
-    title: 'Shipped from its own GitHub repo',
-    body: 'Desktop work is maintained separately from upstream Avnac.',
-    icon: GithubIcon,
-  },
-] as const
-
 const comparisonRows = [
-  {
-    label: 'Where it runs',
-    studio: 'Installed desktop app',
-    web: 'Browser tab',
-  },
-  {
-    label: 'Where files live',
-    studio: 'A local app folder on your computer',
-    web: 'Browser storage',
-  },
-  {
-    label: 'Offline use',
-    studio: 'Ready after install',
-    web: 'Needs the browser',
-  },
-  {
-    label: 'Saving and export',
-    studio: 'Native file dialogs',
-    web: 'Browser downloads',
-  },
+  { label: 'Environment', studio: 'Native desktop app', web: 'Browser tab' },
+  { label: 'Storage', studio: 'Local app folder', web: 'Browser IndexedDB' },
+  { label: 'Offline Use', studio: 'Full support', web: 'Internet required' },
+  { label: 'File Dialogs', studio: 'Native OS dialogs', web: 'Browser downloads' },
   {
     label: 'Best fit',
     studio: 'People who want a local desktop workflow',
@@ -119,464 +78,547 @@ const comparisonRows = [
   },
 ] as const
 
-const capabilityCards = [
+const bentoFeatures = [
   {
     eyebrow: 'Projects',
     title: 'Keep your files on your computer.',
-    body: 'Studio stores work in a local app folder, so your projects are not tied to browser storage alone.',
+    description: 'Studio stores work in a local app folder, so your projects are not tied to browser storage alone.',
+    icon: PackageIcon,
   },
   {
     eyebrow: 'Workflow',
-    title: 'Use the familiar canvas in a desktop app.',
-    body: 'You still get the Avnac editing flow, but with native open, save, and export behavior around it.',
+    title: 'Use the familiar canvas.',
+    description: 'You still get the Avnac editing flow, but with native open, save, and export behavior.',
+    icon: ComputerIcon,
   },
   {
     eyebrow: 'Releases',
-    title: 'Follow one fork for builds and desktop work.',
-    body: 'The Studio fork publishes releases, tracks branch changes, and keeps desktop-specific work in one place.',
+    title: 'Follow one fork for builds.',
+    description: 'The Studio fork publishes releases and keeps desktop-specific work in one place.',
+    icon: GithubIcon,
   },
-] as const
+  {
+    eyebrow: 'Platform',
+    title: 'One workflow, all devices.',
+    description: 'Consistent experience across Windows, macOS (Intel & Arm), and Linux.',
+    icon: CheckmarkCircle02Icon,
+  },
+]
 
 const commandCards = [
   {
-    eyebrow: 'Install Go first',
-    body: 'Wails depends on Go, so install and verify Go before anything else.',
-    command:
-      'macOS:   brew install go\nWindows: winget install -e --id GoLang.Go\nLinux:   sudo apt update && sudo apt install golang-go\ngo version',
+    step: '01',
+    title: 'Environment Setup',
+    body: 'Wails depends on Go. Install and verify your Go installation first.',
+    command: 'brew install go # macOS\nwinget install GoLang.Go # Win\nsudo apt install golang-go # Linux',
+    icon: PackageIcon,
   },
   {
-    eyebrow: 'Install Wails',
-    body: 'After Go is ready, install the Wails CLI once.',
+    step: '02',
+    title: 'Install Wails CLI',
+    body: 'The Wails CLI is required to build and run the native desktop application.',
     command: 'go install github.com/wailsapp/wails/v2/cmd/wails@latest\nwails doctor',
+    icon: CommandLineIcon,
   },
   {
-    eyebrow: 'Run the desktop app',
-    body: 'Start the full desktop build with native bindings.',
-    command: 'cd frontend\nnpm install\ncd ..\nwails dev',
+    step: '03',
+    title: 'Build & Run',
+    body: 'Compile the frontend and start the desktop app with native bindings.',
+    command: 'cd frontend && npm install\ncd .. && wails dev',
+    icon: ComputerIcon,
   },
   {
-    eyebrow: 'Frontend only',
-    body: 'Use this when you are only changing the UI.',
+    step: 'Optional',
+    title: 'Frontend Sandbox',
+    body: 'Run the UI independently if you don\'t need native desktop features.',
     command: 'cd frontend\nnpm install\nnpm run dev',
+    icon: GlobalIcon,
   },
-] as const
+]
+
+// --- Components ---
+
+function PlatformIcon({ icon: Icon, className }: { icon: any; className?: string }) {
+  return (
+    <div
+      className={`flex items-center justify-center rounded-xl bg-black/5 p-2.5 text-black ${className}`}
+    >
+      <HugeiconsIcon icon={Icon} size={20} strokeWidth={2} />
+    </div>
+  )
+}
+
+function BentoCard({ feature, delay, className }: { feature: (typeof bentoFeatures)[0]; delay: number; className?: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay }}
+      whileHover={{ y: -5 }}
+      className={`glass-card apple-shadow-hover flex flex-col h-full p-8 ${className}`}
+    >
+      <div className="mb-6 flex size-10 items-center justify-center rounded-xl bg-black/5 text-black">
+        <HugeiconsIcon icon={feature.icon} size={20} />
+      </div>
+      <span className="mb-2 text-[10px] font-bold uppercase tracking-widest text-black/40">
+        {feature.eyebrow}
+      </span>
+      <h3 className="mb-2 text-xl font-bold tracking-tight">{feature.title}</h3>
+      <p className="text-sm leading-relaxed text-(--text-muted)">
+        {feature.description}
+      </p>
+    </motion.div>
+  )
+}
 
 function StudioPage() {
+  const [detectedOS, setDetectedOS] = useState<string | null>(null)
+  const [showAllPlatforms, setShowAllPlatforms] = useState(false)
+  const [showSecurityNotice, setShowSecurityNotice] = useState(false)
+
+  useEffect(() => {
+    const ua = window.navigator.userAgent.toLowerCase()
+    if (ua.includes('win')) setDetectedOS('windows')
+    else if (ua.includes('mac')) setDetectedOS('macos-arm')
+    else if (ua.includes('linux')) setDetectedOS('linux')
+  }, [])
+
+  const recommendedBuild = downloadLinks.find(link => link.id === detectedOS) || downloadLinks[1]
+
   return (
-    <main className="landing-page">
-      <section className="hero-page relative flex min-h-[84dvh] flex-col overflow-hidden px-5 py-14 sm:px-10 sm:py-16 lg:min-h-[76dvh] lg:px-16 lg:py-14">
-        <div className="hero-bg-orb hero-bg-orb-a" aria-hidden="true" />
-        <div className="hero-bg-orb hero-bg-orb-b" aria-hidden="true" />
-        <div className="hero-grid" aria-hidden="true" />
+    <main className="landing-page min-h-screen overflow-x-hidden pt-32 pb-32">
+      {/* Background Orbs */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <motion.div
+          animate={{ scale: [1, 1.1, 1], x: [0, 50, 0], y: [0, 30, 0] }}
+          transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
+          className="absolute -top-[10%] -left-[10%] size-[500px] rounded-full bg-pink-100/30 blur-[120px]"
+        />
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], x: [0, -40, 0], y: [0, -60, 0] }}
+          transition={{ duration: 25, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
+          className="absolute -right-[10%] bottom-[10%] size-[600px] rounded-full bg-blue-100/20 blur-[120px]"
+        />
+      </div>
 
-        <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-12 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl rise-in text-left">
-            <div className={sectionLabelClass}>Desktop release</div>
-            <h1 className="display-title hero-headline mb-8 font-medium text-balance text-(--text) sm:mb-10 lg:mb-12">
-              Download Avnac Studio.
-            </h1>
-            <p className="mb-10 max-w-2xl text-lg leading-[1.6] text-(--text-muted) sm:mb-12 sm:text-xl sm:leading-[1.55] lg:text-[1.375rem] lg:leading-normal">
-              Avnac Studio is the desktop fork of Avnac. It packages the editor as a native app for
-              Windows, macOS, and Linux, with local files and native save dialogs.
-            </p>
+      <div className="landing-container relative z-10 px-6">
+        {/* Hero Section */}
+        <section className="flex flex-col items-center text-center">
 
-            <div className="flex flex-wrap items-center gap-4">
-              <a href="#platform-downloads" className={primaryButtonClass}>
-                Pick your platform
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="display-title mb-12 max-w-5xl text-5xl font-bold tracking-tight text-balance sm:text-7xl lg:text-8xl"
+          >
+            Download Avnac Studio.
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="mb-20 max-w-3xl text-xl leading-relaxed text-(--text-muted) sm:text-2xl"
+          >
+            Avnac Studio is the desktop fork of Avnac. It packages the editor as a native app for
+            Windows, macOS, and Linux, with local files and native save dialogs.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3 }}
+            className="flex flex-col items-center gap-8 w-full"
+          >
+            <div className="flex flex-col items-center gap-6 w-full max-w-lg">
+              <a
+                href={recommendedBuild.href}
+                className="group relative flex w-full items-center justify-center gap-4 overflow-hidden rounded-3xl bg-black px-10 py-5 text-lg font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl"
+              >
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/15 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                <HugeiconsIcon icon={Download01Icon} size={24} />
+                Download for {recommendedBuild.label}
               </a>
+              <button
+                onClick={() => setShowAllPlatforms(!showAllPlatforms)}
+                className="flex items-center gap-2 text-xs font-semibold text-(--text-muted) transition-colors hover:text-black"
+              >
+                {showAllPlatforms ? 'Collapse options' : 'Show all platforms'}
+                <motion.div animate={{ rotate: showAllPlatforms ? 180 : 0 }}>
+                  <HugeiconsIcon icon={ArrowDown01Icon} size={14} />
+                </motion.div>
+              </button>
             </div>
 
-            <div className="mt-10 max-w-2xl rounded-[1.6rem] border border-black/8 bg-white/72 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.05)] backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-black/5 text-(--text)">
-                  <HugeiconsIcon icon={GithubIcon} size={18} strokeWidth={1.75} />
-                </span>
-                <div className={sectionLabelClass}>Independent fork</div>
-              </div>
-              <p className="mt-3 text-[15px] leading-7 text-(--text-muted)">
-                Avnac Studio is independently maintained by{' '}
-                <a
-                  href="https://github.com/striker561"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={textLinkClass}
+            <AnimatePresence>
+              {showAllPlatforms && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                  className="grid w-full max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-4"
                 >
-                  striker561
-                </a>{' '}
-                and{' '}
-                <a
-                  href="https://github.com/d3uceY"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={textLinkClass}
-                >
-                  d3uceY
-                </a>
-                . It lives in the{' '}
-                <a
-                  href={studioRepoHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={textLinkClass}
-                >
-                  Avnac Studio fork
-                </a>{' '}
-                and is not maintained by{' '}
-                <a
-                  href="https://github.com/akinloluwami"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={textLinkClass}
-                >
-                  akinloluwami
-                </a>{' '}
-                or the upstream Avnac project.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-5">
-                <a
-                  href={striker561TwitterHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Follow striker561 on Twitter"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-(--text) transition-opacity hover:opacity-70"
-                >
-                  <span className="text-base">𝕏</span>
-                  @insigdev
-                </a>
-                <a
-                  href={d3uceyTwitterHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Follow d3uceY on Twitter"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-(--text) transition-opacity hover:opacity-70"
-                >
-                  <span className="text-base">𝕏</span>
-                  @d3uc3y
-                </a>
-              </div>
-            </div>
+                  {downloadLinks.map(link => (
+                    <a
+                      key={link.id}
+                      href={link.href}
+                      className={`glass-card flex flex-col items-start p-8 text-left transition-all hover:bg-white hover:shadow-2xl group ${link.id === recommendedBuild.id ? 'ring-2 ring-black/5' : ''}`}
+                    >
+                      <PlatformIcon
+                        icon={link.icon}
+                        className="mb-6 group-hover:scale-110 transition-transform"
+                      />
+                      <span className="text-lg font-bold mb-2">{link.label}</span>
+                      <p className="text-xs text-(--text-muted) leading-relaxed mb-4">
+                        {link.body}
+                      </p>
+                      <span className="mt-auto inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider opacity-40">
+                        {link.badge}
+                        <HugeiconsIcon icon={ArrowRight01Icon} size={12} />
+                      </span>
+                    </a>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+        </section>
+
+        {/* Bento Grid Features */}
+        <section className="mt-64">
+          <div className="mb-12 flex flex-col items-center text-center">
+            <h2 className="display-title mb-6 text-3xl sm:text-5xl">Desktop native features.</h2>
+            <p className="max-w-2xl text-base text-(--text-muted)">
+              Everything you expect from a professional tool, built for your operating system.
+            </p>
           </div>
 
-          <article className="landing-feature-spotlight relative z-20 w-full max-w-xl">
-            <div className="landing-feature-window">
-              <div className="landing-feature-toolbar">
-                <span />
-                <span />
-                <span />
+          <div className="grid gap-6 md:grid-cols-3 md:grid-rows-[1fr_1fr_auto]">
+            {/* Left: Large Card */}
+            <BentoCard 
+              feature={bentoFeatures[0]} 
+              delay={0.1} 
+              className="md:col-span-2 md:row-span-2 justify-center"
+            />
+            {/* Right: Stacked small cards */}
+            <BentoCard feature={bentoFeatures[1]} delay={0.2} />
+            <BentoCard feature={bentoFeatures[2]} delay={0.3} />
+            {/* Bottom: Spanning card */}
+            <BentoCard 
+              feature={bentoFeatures[3]} 
+              delay={0.4} 
+              className="md:col-span-3"
+            />
+          </div>
+        </section>
+
+        {/* Comparison Section */}
+        <section className="mt-32">
+          <div className="mb-16 flex flex-col items-center text-center">
+            <h2 className="display-title mb-6 text-3xl sm:text-5xl">Studio or Web.</h2>
+            <p className="max-w-2xl text-base text-(--text-muted)">
+              Choose the environment that fits your creative workflow.
+            </p>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch">
+            {/* Studio Card (Dark/Premium) */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="glass-card flex flex-col bg-black p-10 text-white shadow-2xl transition-transform hover:scale-[1.01]"
+            >
+              <div className="mb-8 flex size-14 items-center justify-center rounded-2xl bg-white/10 text-white">
+                <HugeiconsIcon icon={ComputerIcon} size={28} />
               </div>
-              <div className="landing-feature-canvas flex flex-col gap-4">
-                <div className="rounded-3xl border border-black/8 bg-white/84 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.05)]">
-                  <div className={sectionLabelClass}>Ready to share</div>
-                  <h2 className="mt-3 text-[1.65rem] font-semibold leading-tight tracking-[-0.03em] text-(--text)">
-                    One place for downloads, repo links, and desktop context.
-                  </h2>
-                  <p className="mt-3 text-sm leading-7 text-(--text-muted)">
-                    The links on this page use GitHub&apos;s latest-release download pattern, so
-                    they automatically stay current when a new Studio build ships.
+              <h3 className="mb-4 text-3xl font-bold tracking-tight">Avnac Studio</h3>
+              <p className="mb-10 text-lg leading-relaxed text-white/60">
+                The desktop native powerhouse. Optimized for local storage, offline work, and professional file management.
+              </p>
+              
+              <div className="mt-auto space-y-6">
+                {comparisonRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between border-b border-white/10 pb-4">
+                    <span className="text-xs font-bold uppercase tracking-widest text-white/30">{row.label}</span>
+                    <span className="text-sm font-semibold">{row.studio}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Web Card (Light/Minimal) */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="glass-card flex flex-col border border-black/5 bg-white/60 p-10 text-black shadow-xl backdrop-blur-3xl transition-transform hover:scale-[1.01]"
+            >
+              <div className="mb-8 flex size-14 items-center justify-center rounded-2xl bg-black/5 text-black">
+                <HugeiconsIcon icon={GlobalIcon} size={28} />
+              </div>
+              <h3 className="mb-4 text-3xl font-bold tracking-tight">Avnac Web</h3>
+              <p className="mb-10 text-lg leading-relaxed text-black/50">
+                Zero friction, anywhere access. The same powerful editor running directly in your browser.
+              </p>
+
+              <div className="mt-auto space-y-6">
+                {comparisonRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between border-b border-black/5 pb-4">
+                    <span className="text-xs font-bold uppercase tracking-widest text-black/20">{row.label}</span>
+                    <span className="text-sm font-semibold">{row.web}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* macOS Security Notice */}
+        <section className="mt-20 flex justify-center">
+          <div className="w-full max-w-4xl">
+            <button
+              onClick={() => setShowSecurityNotice(!showSecurityNotice)}
+              className="glass-card flex w-full items-center justify-between p-8 text-left transition-all hover:bg-white active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-6">
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-black/5">
+                  <HugeiconsIcon icon={Shield01Icon} size={28} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-1">macOS Security Notice</h3>
+                  <p className="text-sm text-(--text-muted)">
+                    Instructions for first-time launch on macOS.
+                  </p>
+                </div>
+              </div>
+              <motion.div animate={{ rotate: showSecurityNotice ? 180 : 0 }}>
+                <HugeiconsIcon icon={ArrowDown01Icon} size={24} />
+              </motion.div>
+            </button>
+
+            <AnimatePresence>
+              {showSecurityNotice && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="grid gap-8 p-10 bg-white/40 border-x border-b border-black/5 rounded-b-[24px]">
+                    <div className="grid gap-8 sm:grid-cols-2">
+                      <div className="space-y-4">
+                        <h4 className="font-bold text-black flex items-center gap-2">
+                          <span className="flex size-6 items-center justify-center rounded-full bg-black text-white text-[10px]">
+                            1
+                          </span>
+                          Recommended Method
+                        </h4>
+                        <ol className="space-y-3 text-sm text-(--text-muted) list-decimal pl-5">
+                          <li>Locate Avnac.app in Finder</li>
+                          <li>Right-click the app</li>
+                          <li>Click Open, then confirm in the dialog</li>
+                        </ol>
+                      </div>
+                      <div className="space-y-4">
+                        <h4 className="font-bold text-black flex items-center gap-2">
+                          <span className="flex size-6 items-center justify-center rounded-full bg-black text-white text-[10px]">
+                            2
+                          </span>
+                          Alternative Method
+                        </h4>
+                        <p className="text-sm text-(--text-muted)">
+                          Go to System Settings &gt; Privacy &amp; Security &gt; Security and click
+                          "Allow Anyway" next to Avnac Studio.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-6 border-t border-black/5">
+                      <h4 className="font-bold text-black mb-3 text-sm">Advanced (Terminal)</h4>
+                      <div className="rounded-xl bg-black p-4 font-mono text-xs text-white/80">
+                        xattr -rd com.apple.quarantine /Applications/Avnac.app
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </section>
+
+        {/* Developer Section */}
+        <section className="mt-20">
+          <div className="mb-12 text-center">
+            <h2 className="display-title mb-6 text-3xl sm:text-5xl">Open for builders.</h2>
+            <p className="max-w-2xl mx-auto text-base text-(--text-muted)">
+              Avnac Studio is completely open-source. Clone the repository and start building your
+              own features.
+            </p>
+          </div>
+
+          <div className="mx-auto max-w-5xl space-y-12">
+            {commandCards.map((card, idx) => (
+              <motion.div
+                key={card.title}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.1 }}
+                className="group relative grid gap-8 md:grid-cols-[1fr_2fr] items-start"
+              >
+                {/* Step Info */}
+                <div className="relative pt-2">
+                  <div className="mb-4 flex items-center gap-4">
+                    <div className="flex h-10 min-w-10 items-center justify-center rounded-xl bg-black px-4 text-white text-xs font-bold">
+                      {card.step}
+                    </div>
+                    <div className="h-px flex-1 bg-black/5" />
+                  </div>
+                  <h3 className="mb-2 text-xl font-bold tracking-tight">{card.title}</h3>
+                  <p className="text-sm leading-relaxed text-(--text-muted)">
+                    {card.body}
                   </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {heroHighlights.map(item => (
-                    <div
-                      key={item.title}
-                      className="rounded-[1.3rem] border border-black/8 bg-white/86 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-black/5 text-(--text)">
-                          <HugeiconsIcon icon={item.icon} size={18} strokeWidth={1.75} />
+                {/* Terminal Block */}
+                <div className="relative overflow-hidden rounded-3xl border border-black/5 bg-zinc-950 p-1 shadow-2xl transition-transform hover:scale-[1.01]">
+                  <div className="flex items-center gap-1.5 px-6 py-4 border-b border-white/5">
+                    <div className="size-2.5 rounded-full bg-white/10" />
+                    <div className="size-2.5 rounded-full bg-white/10" />
+                    <div className="size-2.5 rounded-full bg-white/10" />
+                    <span className="ml-4 text-[10px] font-bold uppercase tracking-widest text-white/20">terminal</span>
+                  </div>
+                  <div className="p-6 font-mono text-[13px] leading-relaxed text-white/90">
+                    {card.command.split('\n').map((line, lidx) => (
+                      <div key={lidx} className="flex gap-4">
+                        <span className="w-4 shrink-0 text-white/20 text-right select-none">{lidx + 1}</span>
+                        <span className="break-all whitespace-pre-wrap">
+                          {line.split(' ').map((word, widx) => {
+                            if (word.startsWith('#')) return <span key={widx} className="text-white/30">{word} </span>
+                            if (word === 'brew' || word === 'winget' || word === 'sudo' || word === 'npm' || word === 'go' || word === 'wails') 
+                              return <span key={widx} className="text-blue-400">{word} </span>
+                            if (word === 'install' || word === 'run' || word === 'dev') 
+                              return <span key={widx} className="text-purple-400">{word} </span>
+                            return <span key={widx}>{word} </span>
+                          })}
                         </span>
-                        <span className="landing-feature-chip">{item.eyebrow}</span>
                       </div>
-                      <strong className="mt-4 block text-base font-semibold text-(--text)">
-                        {item.title}
-                      </strong>
-                      <p className="mt-2 text-sm leading-6 text-(--text-muted)">{item.body}</p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  {/* Subtle Glow */}
+                  <div className="absolute -right-20 -top-20 size-40 bg-white/5 blur-[50px] pointer-events-none" />
                 </div>
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="platform-downloads" className="landing-section landing-section-tight">
-        <div className="landing-container">
-          <div className="landing-section-heading">
-            <div className={sectionLabelClass}>Download</div>
-            <h2 className="display-title landing-section-title">Pick your platform.</h2>
-            <p className="landing-section-copy">
-              Every button below follows the newest GitHub release, so this page does not need
-              version-by-version link updates.
-            </p>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {downloadLinks.map(item => (
-              <a
-                key={item.title}
-                href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="landing-copy-card flex h-full flex-col no-underline transition-transform hover:-translate-y-0.5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="inline-flex size-11 items-center justify-center rounded-2xl bg-black/5 text-(--text)">
-                    <HugeiconsIcon icon={item.icon} size={20} strokeWidth={1.75} />
-                  </span>
-                  <span className="rounded-full border border-black/8 bg-black/3 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--text-subtle)">
-                    {item.badge}
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <div className="text-sm font-semibold text-(--text)">{item.label}</div>
-                  <h3>{item.title}</h3>
-                  <p>{item.body}</p>
-                </div>
-                <div className="mt-auto pt-5 text-sm font-medium text-(--text)">
-                  Download latest
-                </div>
-              </a>
+              </motion.div>
             ))}
           </div>
 
-          <div className="mt-6 rounded-[1.4rem] border border-black/10 bg-white/70 px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.04)] backdrop-blur-md">
-            <details className="group">
-              <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-                <div>
-                  <div className={sectionLabelClass}>macOS note</div>
-                  <h3 className="mt-2 text-base font-semibold text-(--text)">
-                    macOS Security Notice (First Launch)
-                  </h3>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-(--text-muted)">
-                    If macOS blocks Avnac Studio from opening, the app is not yet signed with Apple.
-                    This is expected for early releases.
-                  </p>
-                </div>
-                <span className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-(--text-subtle) transition-opacity group-open:opacity-0">
-                  Expand
-                </span>
-              </summary>
-
-              <div className="mt-5 space-y-5 border-t border-black/8 pt-5">
-                <div>
-                  <h4 className="text-sm font-semibold text-(--text)">
-                    Try this first (recommended)
-                  </h4>
-                  <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-(--text-muted)">
-                    <li>Locate Avnac.app in Finder</li>
-                    <li>Right-click the app</li>
-                    <li>Click Open</li>
-                    <li>Confirm by clicking Open again</li>
-                  </ol>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold text-(--text)">Alternative method</h4>
-                  <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-(--text-muted)">
-                    <li>Open System Settings</li>
-                    <li>Go to Privacy &amp; Security</li>
-                    <li>Scroll down to Security</li>
-                    <li>Click Allow Anyway next to Avnac Studio</li>
-                    <li>Try opening the app again</li>
-                  </ol>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold text-(--text)">
-                    Advanced (only if it still doesn&apos;t open)
-                  </h4>
-                  <p className="mt-2 text-sm leading-6 text-(--text-muted)">
-                    Open Terminal and run:
-                  </p>
-                  <pre className="mt-2 overflow-x-auto rounded-xl border border-black/8 bg-[#111111] px-4 py-3 text-sm text-white">
-                    <code>xattr -rd com.apple.quarantine /Applications/Avnac.app</code>
-                  </pre>
-                  <p className="mt-2 text-sm leading-6 text-(--text-muted)">
-                    Then try opening the app again.
-                  </p>
-                </div>
-
-                <p className="text-sm leading-6 text-(--text-muted)">
-                  This is a temporary limitation of the current release due to macOS security
-                  requirements. We&apos;re working toward removing this in a future update.
-                </p>
-              </div>
-            </details>
-          </div>
-
-          <div className="mt-8 rounded-[1.8rem] border border-black/8 bg-white/78 px-6 py-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)] backdrop-blur-md">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className={sectionLabelClass}>Repository</div>
-                <p className="mt-3 max-w-2xl text-[15px] leading-7 text-(--text-muted)">
-                  Releases are published from{' '}
-                  <a
-                    href={studioRepoHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={textLinkClass}
-                  >
-                    striker561/Avnac-Studio
-                  </a>
-                  , and active desktop development lives on the{' '}
-                  <a
-                    href={studioBranchHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={textLinkClass}
-                  >
-                    studio branch
-                  </a>
-                  .
-                </p>
-              </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            className="mt-16 flex flex-col items-center gap-6"
+          >
+            <div className="flex flex-wrap justify-center gap-4">
+              <a
+                href={studioRepoHref}
+                target="_blank"
+                rel="noreferrer"
+                className="glass-card flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all hover:bg-white"
+              >
+                <HugeiconsIcon icon={GithubIcon} size={18} />
+                View Repository
+              </a>
               <a
                 href={studioBranchHref}
                 target="_blank"
-                rel="noopener noreferrer"
-                className={secondaryButtonClass}
+                rel="noreferrer"
+                className="glass-card flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all hover:bg-white"
               >
-                View studio branch
+                <HugeiconsIcon icon={CommandLineIcon} size={18} />
+                Explore Source
               </a>
             </div>
-          </div>
-        </div>
-      </section>
+          </motion.div>
+        </section>
 
-      <section className="landing-section">
-        <div className="landing-container">
-          <div className="landing-process-shell">
-            <div className="landing-process-header">
-              <div>
-                <div className={sectionLabelInverseClass}>Desktop or web</div>
-                <h2 className="display-title landing-process-title">
-                  Choose the version that fits your workflow.
-                </h2>
-              </div>
-              <p>
-                Both versions follow the same editor direction. The main difference is whether you
-                want a local desktop install or a browser-based workflow.
-              </p>
-            </div>
+        {/* CTA */}
+        <section className="mt-32 mb-16 text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            className="relative inline-block"
+          >
+            <div className="absolute -inset-20 bg-gradient-to-r from-blue-500/20 via-pink-500/20 to-purple-500/20 blur-[100px] opacity-50" />
+            <h2 className="display-title relative mb-12 text-4xl sm:text-6xl lg:text-7xl tracking-tighter">
+              Start creating.
+            </h2>
 
-            <div className="overflow-hidden rounded-[1.6rem] border border-black/8 bg-white/78 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-2xl border-collapse text-left">
-                  <thead className="bg-black/3 text-sm text-(--text-subtle)">
-                    <tr>
-                      <th className="px-5 py-4 font-medium">Area</th>
-                      <th className="px-5 py-4 font-medium">Avnac Studio</th>
-                      <th className="px-5 py-4 font-medium">Avnac web</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparisonRows.map(row => (
-                      <tr key={row.label} className="border-t border-black/6 align-top">
-                        <th className="px-5 py-4 text-sm font-semibold text-(--text)">
-                          {row.label}
-                        </th>
-                        <td className="px-5 py-4 text-sm leading-6 text-(--text-muted)">
-                          {row.studio}
-                        </td>
-                        <td className="px-5 py-4 text-sm leading-6 text-(--text-muted)">
-                          {row.web}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="landing-section">
-        <div className="landing-container">
-          <div className="landing-section-heading">
-            <div className={sectionLabelClass}>Why Studio</div>
-            <h2 className="display-title landing-section-title">What you get on desktop.</h2>
-            <p className="landing-section-copy">
-              Studio keeps the Avnac editor familiar while making the surrounding workflow feel like
-              a proper desktop app.
-            </p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            {capabilityCards.map(card => (
-              <article key={card.title} className="landing-copy-card flex h-full flex-col">
-                <div className={sectionLabelClass}>{card.eyebrow}</div>
-                <h3>{card.title}</h3>
-                <p>{card.body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="landing-section">
-        <div className="landing-container">
-          <div className="landing-ai-shell">
-            <div className="landing-ai-header">
-              <div className={sectionLabelClass}>For developers</div>
-              <h2 className="display-title landing-section-title">Working on the desktop fork?</h2>
-              <p className="landing-section-copy">
-                These commands are based on the Studio setup flow, with Go first and Wails second.
-              </p>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              {commandCards.map(card => (
-                <article key={card.eyebrow} className="landing-ai-card flex h-full flex-col">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-black/5 text-(--text)">
-                      <HugeiconsIcon icon={CommandLineIcon} size={18} strokeWidth={1.75} />
-                    </span>
-                    <div className="landing-kicker">{card.eyebrow}</div>
-                  </div>
-                  <p className="mt-4">{card.body}</p>
-                  <pre className="mt-6 h-43 overflow-x-auto rounded-[1.2rem] bg-[#111111] px-4 py-4 text-sm leading-7 text-white">
-                    <code className="block whitespace-pre-wrap">{card.command}</code>
-                  </pre>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="landing-section landing-section-last">
-        <div className="landing-container">
-          <div className="landing-cta-band landing-cta-band-only">
-            <div>
-              <div className={sectionLabelClass}>Maintained independently</div>
-              <h2 className="display-title landing-cta-title">
-                Follow the Studio fork for desktop builds and updates.
-              </h2>
-            </div>
-            <div className="landing-cta-actions">
+            <div className="relative flex flex-wrap justify-center gap-6">
+              <a
+                href={recommendedBuild.href}
+                className="rounded-[2rem] bg-black px-14 py-7 text-xl font-bold text-white shadow-[0_20px_50px_-10px_rgba(0,0,0,0.3)] transition-all hover:scale-105 active:scale-95"
+              >
+                Download Now
+              </a>
               <a
                 href={releasePageHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={primaryButtonClass}
+                className="glass-card flex items-center gap-3 px-12 py-7 text-xl font-bold transition-all hover:bg-white active:scale-[0.98]"
               >
-                Open releases
-              </a>
-              <a
-                href={studioBranchHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={secondaryButtonClass}
-              >
-                View studio branch
+                Browse Releases
+                <HugeiconsIcon icon={ArrowRight01Icon} size={22} />
               </a>
             </div>
+          </motion.div>
+        </section>
+
+        {/* Footer Fork Notice */}
+        <footer className="mt-40 border-t border-black/5 pt-20">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mx-auto max-w-2xl rounded-3xl border border-black/5 bg-black/5 p-8 text-center backdrop-blur-sm"
+          >
+            <p className="text-sm leading-relaxed text-(--text-muted)">
+              Avnac Studio is independently maintained by{' '}
+              <a
+                href="https://github.com/striker561"
+                target="_blank"
+                rel="noreferrer"
+                className="text-black font-semibold underline underline-offset-4"
+              >
+                striker561
+              </a>{' '}
+              and{' '}
+              <a
+                href="https://github.com/d3uceY"
+                target="_blank"
+                rel="noreferrer"
+                className="text-black font-semibold underline underline-offset-4"
+              >
+                d3uceY
+              </a>
+              . It lives in the{' '}
+              <a
+                href={studioRepoHref}
+                target="_blank"
+                rel="noreferrer"
+                className="text-black font-semibold underline underline-offset-4"
+              >
+                Avnac Studio fork
+              </a>{' '}
+              and is not maintained by the upstream Avnac project.
+            </p>
+            <div className="mt-6 flex justify-center gap-6">
+              <a href="https://x.com/insigdev" target="_blank" rel="noreferrer" className="text-xs font-bold text-black/60 hover:text-black transition-colors">𝕏 @insigdev</a>
+              <a href="https://x.com/d3uc3y" target="_blank" rel="noreferrer" className="text-xs font-bold text-black/60 hover:text-black transition-colors">𝕏 @d3uc3y</a>
+            </div>
+          </motion.div>
+          <div className="mt-12 text-center text-[10px] font-bold uppercase tracking-[0.2em] opacity-20">
+            Avnac Studio &copy; {new Date().getFullYear()}
           </div>
-        </div>
-      </section>
+        </footer>
+      </div>
     </main>
   )
 }
