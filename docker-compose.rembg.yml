@@ -13,6 +13,13 @@ services:
       - --log_level
       - info
       - --no-ui
+    environment:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      ORT_NUM_THREADS: "1"
+      REMBG_PRELOAD_MODEL: "birefnet-general-lite"
     ports:
       - "7000:7000"
     restart: unless-stopped
